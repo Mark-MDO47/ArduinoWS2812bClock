@@ -1,2 +1,5 @@
 # ArduinoWS2812bClock
-Arduino WS2812b Clock with 243-LED disk
+
+Experimenting with this incredible WS2821b 243-LED disk, attempting to control with an Arduino Nano.
+https://smile.amazon.com/gp/product/B083VWVP3J/
+
