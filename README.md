@@ -1,4 +1,4 @@
-# ArduinoWS2812bClock
+# ESP32 WS2812b Clock
 Experimenting with this incredible WS2821b 241-LED disk.
 https://smile.amazon.com/gp/product/B083VWVP3J/
 
