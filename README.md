@@ -1,6 +1,8 @@
 # ESP32 WS2812b Clock
 Experimenting with this incredible low-priced WS2812b 241-LED disk.
 
+Dimensions of the disk are here: https://github.com/Mark-MDO47/ESP32WS2812bClock/blob/main/images/LED_241_Dimensions.jpg
+
 With 241 LEDs, the RAM requirements exceed my old standby of Arduino Nano.  I chose the ESP32.
 
 # Parts List
