@@ -1,5 +1,5 @@
 # ArduinoWS2812bClock
-Experimenting with this incredible WS2821b 241-LED disk, attempting to control with an Arduino Nano.
+Experimenting with this incredible WS2821b 241-LED disk.
 https://smile.amazon.com/gp/product/B083VWVP3J/
 
 With 241 LEDs, the RAM requirements exceed my old standby of Arduino Nano. I chose the ESP32.
