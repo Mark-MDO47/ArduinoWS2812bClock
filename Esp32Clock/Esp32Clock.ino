@@ -24,8 +24,8 @@
 //       Mark
 
 
-#include "Arduino.h"
-#include <EEPROM.h>                          // to store configuration info
+#include <WiFi.h>
+#include <time.h>
 #include "FastLED.h"                         // to manipulate WS2812b (NeoPixel) 5050 RGB LED Rings
 
 #define USE_PROGMEM true                     // set true to keep big const items in FLASH (PROGMEM keyword)
@@ -33,10 +33,14 @@
 
 void setup() {
   // put your setup code here, to run once:
+  Serial.begin(115200);         
+  delay(1000);
+  Serial.println("Here I am...");
 
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-
+  delay(10*1000);
+  Serial.println("Here I am again...");
 }
