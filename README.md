@@ -5,6 +5,7 @@ Dimensions of the disk are here: https://github.com/Mark-MDO47/ESP32WS2812bClock
 
 With 241 LEDs, the RAM requirements exceed my old standby of Arduino Nano.  I chose the ESP32.
 
+
 # Parts List
 Parts List so far
 
