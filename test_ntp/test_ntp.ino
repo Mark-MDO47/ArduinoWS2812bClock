@@ -121,7 +121,7 @@ int connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
       success = true;
     } else {
       if (false != doPrint) {
-        Serial.print("\n\nERROR - strftime() failed\n\n");
+        Serial.print("\n\nERROR - getLocalTime() failed\n\n");
       } // end if doPrint
       success = false;
     }

@@ -1,0 +1,207 @@
+EESchema Schematic File Version 4
+EELAYER 30 0
+EELAYER END
+$Descr A 11000 8500
+encoding utf-8
+Sheet 1 1
+Title "ESP32 Clock"
+Date "2020-11-07"
+Rev "---"
+Comp ""
+Comment1 ""
+Comment2 ""
+Comment3 ""
+Comment4 ""
+$EndDescr
+$Comp
+L power:GND #PWR0102
+U 1 1 5A3DEBCE
+P 1250 4950
+F 0 "#PWR0102" H 1250 4700 50  0001 C CNN
+F 1 "GND" H 1250 4800 50  0000 C CNN
+F 2 "" H 1250 4950 50  0001 C CNN
+F 3 "" H 1250 4950 50  0001 C CNN
+	1    1250 4950
+	1    0    0    -1  
+$EndComp
+$Comp
+L mdoLibrary:UBEC #J0101
+U 1 1 5A459C5D
+P 2050 4450
+F 0 "#J0101" H 2050 4450 60  0000 C CNN
+F 1 "UBEC" H 2050 4550 60  0000 C CNN
+F 2 "" H 2050 4450 60  0001 C CNN
+F 3 "" H 2050 4450 60  0001 C CNN
+	1    2050 4450
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	2750 4600 3050 4600
+Wire Wire Line
+	1250 4600 1550 4600
+Wire Wire Line
+	7750 3750 8150 3750
+Wire Wire Line
+	6300 3950 6550 3950
+$Comp
+L mdoLibrary:SN74HCT125N A?
+U 1 1 5E333EFD
+P 7150 4050
+F 0 "A?" H 7150 3950 60  0000 C CNN
+F 1 "SN74HCT125N" H 7150 3850 60  0000 C TNN
+F 2 "" H 7150 4050 60  0000 C CNN
+F 3 "" H 7150 4050 60  0000 C CNN
+	1    7150 4050
+	1    0    0    -1  
+$EndComp
+$Comp
+L power:+8V #PWR?
+U 1 1 5F0E58C5
+P 650 3950
+F 0 "#PWR?" H 650 3800 50  0001 C CNN
+F 1 "+8V" H 665 4123 50  0000 C CNN
+F 2 "" H 650 3950 50  0001 C CNN
+F 3 "" H 650 3950 50  0001 C CNN
+	1    650  3950
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	650  4200 650  3950
+$Comp
+L switches:SW_SPST SW?
+U 1 1 5F12E089
+P 1000 4200
+F 0 "SW?" H 1000 4450 50  0001 C CNN
+F 1 "ToggleSW" H 1000 4344 50  0000 C CNN
+F 2 "" H 1000 4200 50  0001 C CNN
+F 3 "" H 1000 4200 50  0001 C CNN
+	1    1000 4200
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	650  4200 800  4200
+$Comp
+L Device:R R?
+U 1 1 5F41D9F7
+P 7900 2800
+F 0 "R?" V 7980 2800 50  0000 C CNN
+F 1 "220 ohm" V 7800 2800 50  0000 C CNN
+F 2 "" V 7830 2800 50  0001 C CNN
+F 3 "" H 7900 2800 50  0001 C CNN
+	1    7900 2800
+	-1   0    0    1   
+$EndComp
+$Comp
+L Device:C C?
+U 1 1 5F4A44E0
+P 3050 4400
+F 0 "C?" H 3165 4446 50  0000 L CNN
+F 1 "100uF" H 3165 4355 50  0000 L CNN
+F 2 "" H 3088 4250 50  0001 C CNN
+F 3 "~" H 3050 4400 50  0001 C CNN
+	1    3050 4400
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	3050 4250 3050 4200
+Connection ~ 3050 4200
+Wire Wire Line
+	3050 4200 2750 4200
+Wire Wire Line
+	3050 4550 3050 4600
+Connection ~ 3050 4600
+Wire Wire Line
+	1250 4600 1250 4950
+Wire Wire Line
+	3050 4600 3050 6400
+Wire Wire Line
+	1200 4200 1550 4200
+$Comp
+L mdoLibrary:ESP32_WROOM_DORHEA U?
+U 1 1 5FA9B8A3
+P 4750 3100
+F 0 "U?" H 4750 3991 79  0000 C CNN
+F 1 "ESP32_WROOM_DORHEA" H 4750 3856 79  0000 C CNN
+F 2 "" H 4750 3100 79  0001 C CNN
+F 3 "" H 4750 3100 79  0001 C CNN
+	1    4750 3100
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	4050 3900 3800 3900
+Wire Wire Line
+	3800 3900 3800 4200
+Wire Wire Line
+	7900 2500 7900 2650
+Wire Wire Line
+	5450 2500 7900 2500
+Wire Wire Line
+	7900 2950 7900 3850
+Wire Wire Line
+	7900 3850 7750 3850
+$Comp
+L mdoLibrary:LEDring_big Z?
+U 1 1 5FB00B81
+P 9000 1700
+F 0 "Z?" H 10028 1695 60  0000 L CNN
+F 1 "LEDring_big" H 10028 1589 60  0000 L CNN
+F 2 "" H 9000 1850 60  0001 C CNN
+F 3 "" H 9000 1850 60  0001 C CNN
+	1    9000 1700
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7750 3350 8400 3350
+Wire Wire Line
+	8950 2800 8950 6400
+Wire Wire Line
+	6300 3950 6300 4600
+Connection ~ 6300 6400
+Wire Wire Line
+	8400 6400 8400 3350
+Connection ~ 8400 6400
+Wire Wire Line
+	8400 6400 8950 6400
+Wire Wire Line
+	9050 2800 9050 6000
+Wire Wire Line
+	9150 3950 9150 2800
+Wire Wire Line
+	7750 3950 9150 3950
+Wire Wire Line
+	8150 3750 8150 4600
+Wire Wire Line
+	6300 4600 8150 4600
+Connection ~ 6300 4600
+Wire Wire Line
+	6300 4600 6300 6400
+Wire Wire Line
+	6300 6400 8400 6400
+Wire Wire Line
+	4050 3800 3550 3800
+Wire Wire Line
+	3550 3800 3550 4450
+Wire Wire Line
+	5450 3800 5700 3800
+Wire Wire Line
+	5700 3800 5700 4450
+Wire Wire Line
+	3550 4450 5700 4450
+Wire Wire Line
+	3050 6400 3550 6400
+Wire Wire Line
+	3550 4450 3550 6400
+Connection ~ 3550 4450
+Connection ~ 3550 6400
+Wire Wire Line
+	3550 6400 6300 6400
+Wire Wire Line
+	3400 4200 3400 6000
+Connection ~ 3400 4200
+Wire Wire Line
+	3400 4200 3800 4200
+Wire Wire Line
+	3400 6000 9050 6000
+Wire Wire Line
+	3050 4200 3400 4200
+$EndSCHEMATC
