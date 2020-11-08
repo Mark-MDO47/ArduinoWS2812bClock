@@ -215,6 +215,7 @@ void loop() {
 
   myState.timerNow = millis();
 
+  // update our time; connect to WiFi and NTP as needed
   if (getLocalTime(&tm_time)) {
     strftime(time_str, STRF_NUMCHARS, "%d %H:%M:%S", &tm_time);
     if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
@@ -227,12 +228,22 @@ void loop() {
     } // end if the seconds field changed
   }  
 
-  if ((myState.timerNow-myState.timerPrevLEDstep) >= myState.ptrnDelayLEDstep) {
+  // display time on clock if it changed
+  // general LED patterns - if ((myState.timerNow-myState.timerPrevLEDstep) >= myState.ptrnDelayLEDstep) {
+  if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
     gHue += 3; // rotating "base color" used by Demo Reel 100 patterns
+
+    // update the clock
     checkDataGuard();
-    doPattern(myState.efctLED, 0); // start
+    updateClockTime(time_str);
+    RadarEffect((uint8_t) tm_time.tm_sec, &led_RED);
+    // general LED patterns - doPattern(myState.efctLED, 0); // start
     checkDataGuard();
+
+    // display on the LEDs
     FastLED.show();
+
+    // not done till the papaerwork is finished
     myState.timerPrevLEDstep = myState.timerNow;
     globalLoopCount += 1;
   } // end wait for next LED activity
@@ -241,7 +252,184 @@ void loop() {
   delay(50);
 } // end loop()
 
+
+// ******************************** WIFI AND TIME UTILITIES ********************************
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// connectGetNtpInfoAndDisconnect() - connect to WiFi (if needed), get NTP info, disconnect (if requested)
+//    if disconnectWifi then disconnect when done
+//    if doPrint then print status as we go
+//
+int connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
+  int success = false;
+  int tries = 0;
+
+  if (WiFi.status() != WL_CONNECTED) {
+    // Connect to the network
+    if (false != doPrint) {
+      Serial.print("Connect to ");
+      Serial.println(SSID);
+    } // end if doPrint
+    WiFi.mode(WIFI_STA); // Station mode (aka STA mode or WiFi client mode). ESP32 connects to an access point
+    WiFi.begin(SSID, WiFiPassword);
+    while ((tries < WIFI_NUMTRIES) && (WiFi.status() != WL_CONNECTED)) {
+      // Wait for the Wi-Fi to connect
+      delay(500);
+      if (false != doPrint) {
+        Serial.print('.');
+      } // end if doPrint
+      tries += 1;
+    } // end while waiting for WL_CONNECTED
+  } // end if need to connect to network
+
+  if (WiFi.status() == WL_CONNECTED) {
+    // connected to WiFi network
+    if (0 != doPrint) {
+      Serial.println("\n");
+      Serial.println("Connection established");  
+      Serial.print("IP address:\t");
+      Serial.println(WiFi.localIP());
+    } // end if doPrint
+
+    // Get the NTP time
+    // US  +340308−1181434 America/Los_Angeles Pacific Canonical −08:00  −07:00
+    // setenv("TZ", "PST8PDT,M3.2.0/02:00:00,M11.1.0/02:00:00", 1); // see https://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/global_data.html
+    //       M3.2.0/02:00:00 - enter DST on second (2) Sunday (0) of March (3) at 2 am (02:00:00)
+    //       M11.1.0/02:00:00 - exit DST on first (1) Sunday (0) of November (11) at 2 am (02:00:00)
+    //
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+    if (getLocalTime(&tm_time)) {
+      strftime(time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &tm_time);
+      success = true;
+    } else {
+      if (false != doPrint) {
+        Serial.print("\n\nERROR - getLocalTime() failed\n\n");
+      } // end if doPrint
+      success = false;
+    }
+  } // end if connected to WiFi
+
+  if ((true == disconnectWifi) && (WiFi.status() == WL_CONNECTED)) {
+      //disconnect WiFi
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+      if (0 != doPrint) {
+        Serial.println("\nWifi Disconnected\n");
+      } // end if doPrint
+  } // end if need to disconnect WiFi
+
+  return(success);
+} // end connectGetNtpInfoAndDisconnect()
+
+
+// ******************************** DEBUG UTILITIES ********************************
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// checkDataGuard()
+void checkDataGuard() {
+  static int8_t showOneTime = 1;
+  if ((showOneTime >= 1) && ((0x55555555 != data_guard_before) || (0x55555555 != data_guard_after))) {
+    Serial.print(F("checkDataGuard should be 0x55555555; before=0x"));
+    Serial.print(data_guard_before, HEX);
+    Serial.print(F(" after=0x"));
+    Serial.println(data_guard_after, HEX);
+    delay(2000); // for debugging & show
+    showOneTime--;
+  }
+} // end checkDataGuard()
+
+// ******************************** CLOCK UTILITIES ****************************************
+
+void updateClockTime(char * pTime) {
+  // TBS FIXME
+} // 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// radar_ring_idx[ring][sec] describes the index within each ring of a moving second-hand or a leading edge of a radar sweep as it moves in a clockwise TBR direction
+// for ring 0 which has 60 LEDs, it is just a count of 0 through 59
+// others are computed by calculating MOD(ROUND(ring0num[idx]*NUM_LEDS_THIS_RING/MAX_LEDS_PER_RING,0),NUM_LEDS_THIS_RING)
+// we do NOT add the starting LED per ring from start_per_ring[]. The mod calculations for each ring as we go left and right are easier with the data in this form, without that addition
+static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
+ { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59 },
+ { 0, 1, 2, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 22, 23, 24, 25, 26, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 34, 35, 36, 37, 38, 38, 39, 40, 41, 42, 42, 43, 44, 45, 46, 46, 47 },
+ { 0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 17, 17, 18, 19, 19, 20, 21, 21, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 30, 31, 31, 32, 33, 33, 34, 35, 35, 36, 37, 37, 38, 39, 39 },
+ { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31 },
+ { 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23, 0 },
+ { 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 0 },
+ { 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 0, 0 },
+ { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 0, 0, 0 },
+ { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+}; // end radar_ring_idx[][]
+static uint8_t radar_ring_previdx[NUM_RINGS_PER_DISK] = { MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING }; //
+#define TRUE_IDX(idx,ring) ((idx)%leds_per_ring[ring])+start_per_ring[ring]
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// RadarEffect()
+//    The idea is to use radar_ring_idx[ring][sec] for the "point" of the line on each ring. The rings are ordered outside first then going inside.
+//    There will be trailing and leading fade for the big rings 0-7. It will trail at 1/2, 1/4 and 1/8 intensity for three rings after the point.
+//    The lead will be zero when the point moves. Each time the point stays still the lead will be one LED at 1/2 intensity.
+// The background is the shadow area.
+// For now the direction is in the clockwise direction
+//
+void RadarEffect(uint8_t sec, CRGB* pColor) {
+  uint16_t ring;
+  uint16_t idx, idx2;
+
+  // make sure sec is valid; get the color of the sweep hand
+  sec %= 60;
+  led_tmp1 = *pColor;
+
+  // copy in the shadow
+  memcpy(&led_display[0], &led_display[NUM_LEDS_PER_DISK], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
+
+  for (ring = 0; ring < NUM_RINGS_PER_DISK; ring++) {
+    idx = TRUE_IDX(radar_ring_idx[ring][sec], ring);
+    // calculate color for the point of this ring
+    led_display[idx].red   = min(((uint16_t)led_display[idx].red)   + led_tmp1.red,   255);
+    led_display[idx].green = min(((uint16_t)led_display[idx].green) + led_tmp1.green, 255);
+    led_display[idx].blue  = min(((uint16_t)led_display[idx].blue)  + led_tmp1.blue,  255);
+    if ((ring < 7) && (idx != radar_ring_previdx[ring])) { // big rings do leading and trailing
+      // calculate 1/2 of color
+      led_tmp1.red >>= 1;
+      led_tmp1.green >>= 1;
+      led_tmp1.blue >>= 1;
+      // leading 1/2
+      idx2 = TRUE_IDX(1+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      // trailing 1/2
+      idx2 = TRUE_IDX(leds_per_ring[ring]-1+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      // trailing 1/4
+      // calculate 1/4 of color
+      led_tmp1.red >>= 1;
+      led_tmp1.green >>= 1;
+      led_tmp1.blue >>= 1;
+      idx2 = TRUE_IDX(leds_per_ring[ring]-2+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      // trailing 1/8
+      // calculate 1/8 of color
+      led_tmp1.red >>= 1;
+      led_tmp1.green >>= 1;
+      led_tmp1.blue >>= 1;
+      idx2 = TRUE_IDX(leds_per_ring[ring]-3+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+    } // end if a big ring
+    radar_ring_previdx[ring] = idx;
+  } // end for all rings
+  
+}; // end RadarEffect()
+
+
 // ******************************** LED UTILITIES ****************************************
+
 
 // doPattern(nowEfctLED, tmpInit) - start or step the pattern
 //
@@ -659,173 +847,3 @@ void RBG_juggle_numdot_ring(int8_t numDots) { // pattern from Demo Reel 100
     } // end for rings
   } // end if rings or whole disk
 } // end RBG_juggle_numdot_ring()
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-// radar_ring_idx[ring][sec] describes the index within each ring of a moving second-hand or a leading edge of a radar sweep as it moves in a clockwise TBR direction
-// for ring 0 which has 60 LEDs, it is just a count of 0 through 59
-// others are computed by calculating MOD(ROUND(ring0num[idx]*NUM_LEDS_THIS_RING/MAX_LEDS_PER_RING,0),NUM_LEDS_THIS_RING)
-// we do NOT add the starting LED per ring from start_per_ring[]. The mod calculations for each ring as we go left and right are easier with the data in this form, without that addition
-static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
- { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59 },
- { 0, 1, 2, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 22, 23, 24, 25, 26, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 34, 35, 36, 37, 38, 38, 39, 40, 41, 42, 42, 43, 44, 45, 46, 46, 47 },
- { 0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 17, 17, 18, 19, 19, 20, 21, 21, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 30, 31, 31, 32, 33, 33, 34, 35, 35, 36, 37, 37, 38, 39, 39 },
- { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31 },
- { 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23, 0 },
- { 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 0 },
- { 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 0, 0 },
- { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 0, 0, 0 },
- { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-}; // end radar_ring_idx[][]
-static uint8_t radar_ring_previdx[NUM_RINGS_PER_DISK] = { MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING }; //
-#define TRUE_IDX(idx,ring) ((idx)%leds_per_ring[ring])+start_per_ring[ring]
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-// RadarEffect()
-//    The idea is to use radar_ring_idx[ring][sec] for the "point" of the line on each ring. The rings are ordered outside first then going inside.
-//    There will be trailing and leading fade for the big rings 0-7. It will trail at 1/2, 1/4 and 1/8 intensity for three rings after the point.
-//    The lead will be zero when the point moves. Each time the point stays still the lead will be one LED at 1/2 intensity.
-// The background is the shadow area.
-// For now the direction is in the clockwise direction
-//
-void RadarEffect(uint8_t sec, CRGB* pColor) {
-  uint16_t ring;
-  uint16_t idx, idx2;
-
-  // make sure sec is valid; get the color of the sweep hand
-  sec %= 60;
-  led_tmp1 = *pColor;
-
-  // copy in the shadow
-  memcpy(&led_display[0], &led_display[NUM_LEDS_PER_DISK], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
-
-  for (ring = 0; ring < NUM_RINGS_PER_DISK; ring++) {
-    idx = TRUE_IDX(radar_ring_idx[ring][sec], ring);
-    // calculate color for the point of this ring
-    led_display[idx].red   = min(((uint16_t)led_display[idx].red)   + led_tmp1.red,   255);
-    led_display[idx].green = min(((uint16_t)led_display[idx].green) + led_tmp1.green, 255);
-    led_display[idx].blue  = min(((uint16_t)led_display[idx].blue)  + led_tmp1.blue,  255);
-    if ((ring < 7) && (idx != radar_ring_previdx[ring])) { // big rings do leading and trailing
-      // calculate 1/2 of color
-      led_tmp1.red >>= 1;
-      led_tmp1.green >>= 1;
-      led_tmp1.blue >>= 1;
-      // leading 1/2
-      idx2 = TRUE_IDX(1+radar_ring_idx[ring][sec], ring);
-      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
-      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
-      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
-      // trailing 1/2
-      idx2 = TRUE_IDX(leds_per_ring[ring]-1+radar_ring_idx[ring][sec], ring);
-      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
-      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
-      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
-      // trailing 1/4
-      // calculate 1/4 of color
-      led_tmp1.red >>= 1;
-      led_tmp1.green >>= 1;
-      led_tmp1.blue >>= 1;
-      idx2 = TRUE_IDX(leds_per_ring[ring]-2+radar_ring_idx[ring][sec], ring);
-      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
-      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
-      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
-      // trailing 1/8
-      // calculate 1/8 of color
-      led_tmp1.red >>= 1;
-      led_tmp1.green >>= 1;
-      led_tmp1.blue >>= 1;
-      idx2 = TRUE_IDX(leds_per_ring[ring]-3+radar_ring_idx[ring][sec], ring);
-      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
-      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
-      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
-    } // end if a big ring
-    radar_ring_previdx[ring] = idx;
-  } // end for all rings
-  
-}; // end RadarEffect()
-
-
-// ******************************** WIFI AND TIME UTILITIES ********************************
-
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-// connectGetNtpInfoAndDisconnect() - connect to WiFi (if needed), get NTP info, disconnect (if requested)
-//    if disconnectWifi then disconnect when done
-//    if doPrint then print status as we go
-//
-int connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
-  int success = false;
-  int tries = 0;
-
-  if (WiFi.status() != WL_CONNECTED) {
-    // Connect to the network
-    if (false != doPrint) {
-      Serial.print("Connect to ");
-      Serial.println(SSID);
-    } // end if doPrint
-    WiFi.mode(WIFI_STA); // Station mode (aka STA mode or WiFi client mode). ESP32 connects to an access point
-    WiFi.begin(SSID, WiFiPassword);
-    while ((tries < WIFI_NUMTRIES) && (WiFi.status() != WL_CONNECTED)) {
-      // Wait for the Wi-Fi to connect
-      delay(500);
-      if (false != doPrint) {
-        Serial.print('.');
-      } // end if doPrint
-      tries += 1;
-    } // end while waiting for WL_CONNECTED
-  } // end if need to connect to network
-
-  if (WiFi.status() == WL_CONNECTED) {
-    // connected to WiFi network
-    if (0 != doPrint) {
-      Serial.println("\n");
-      Serial.println("Connection established");  
-      Serial.print("IP address:\t");
-      Serial.println(WiFi.localIP());
-    } // end if doPrint
-
-    // Get the NTP time
-    // US  +340308−1181434 America/Los_Angeles Pacific Canonical −08:00  −07:00
-    // setenv("TZ", "PST8PDT,M3.2.0/02:00:00,M11.1.0/02:00:00", 1); // see https://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/global_data.html
-    //       M3.2.0/02:00:00 - enter DST on second (2) Sunday (0) of March (3) at 2 am (02:00:00)
-    //       M11.1.0/02:00:00 - exit DST on first (1) Sunday (0) of November (11) at 2 am (02:00:00)
-    //
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-    if (getLocalTime(&tm_time)) {
-      strftime(time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &tm_time);
-      success = true;
-    } else {
-      if (false != doPrint) {
-        Serial.print("\n\nERROR - getLocalTime() failed\n\n");
-      } // end if doPrint
-      success = false;
-    }
-  } // end if connected to WiFi
-
-  if ((true == disconnectWifi) && (WiFi.status() == WL_CONNECTED)) {
-      //disconnect WiFi
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_OFF);
-      if (0 != doPrint) {
-        Serial.println("\nWifi Disconnected\n");
-      } // end if doPrint
-  } // end if need to disconnect WiFi
-
-  return(success);
-} // end connectGetNtpInfoAndDisconnect()
-
-
-// ******************************** DEBUG UTILITIES ********************************
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-// checkDataGuard()
-void checkDataGuard() {
-  static int8_t showOneTime = 1;
-  if ((showOneTime >= 1) && ((0x55555555 != data_guard_before) || (0x55555555 != data_guard_after))) {
-    Serial.print(F("checkDataGuard should be 0x55555555; before=0x"));
-    Serial.print(data_guard_before, HEX);
-    Serial.print(F(" after=0x"));
-    Serial.println(data_guard_after, HEX);
-    delay(2000); // for debugging & show
-    showOneTime--;
-  }
-} // end checkDataGuard()
