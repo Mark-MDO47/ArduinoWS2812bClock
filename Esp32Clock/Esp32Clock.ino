@@ -156,8 +156,12 @@ static struct _myState_t {
 } myState;
 
 #define DEBUGALL_GLOBAL 0                    // sets ALL debug flags at once
+#define DEBUG_WIFI_NTP  true                 // shows the steps for NTP time acquisition
 #define DEBUG_SHOW_MSEC 1                    // use globalLoopCount for millis() display not loopcount
 static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is either the milliseconds since startup or a count of times through loop()
+
+#define DISCONNECT_WIFI true    // disconnect WiFi as soon as we are done getting NTP time
+
 #define DPIN_FASTLED 23  // will need to experiment for my board: ESP32 ESP-32S CP2102 NodeMCU-32S ESP-WROOM-32 WiFi Unassembled https://smile.amazon.com/gp/product/B08DQQ8CBP/
                          // GPIO23 is marked on this board as D23. With the USB on the bottom, it is pin number 15 from the bottom on the right hand side (top on RH side).
                          //
@@ -185,21 +189,20 @@ void setup() {
   Serial.begin(115200);         
   delay(10);
 
-  for (int i = 0; i < NUMOF(radar_xray_bitmask); i++) { radar_xray_bitmask[i] = 0; }
+  for (int i = 0; i < NUMOF(radar_xray_bitmask); i++) { radar_xray_bitmask[i] = 0; } // TBS FIXME maybe not used
 
   // initialize the FastLED library for our setup
   // according to Amazon comments: Library configuration used was WS2812B GRB (not RGB). Library call: FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);. Everything worked as expected.
   //    this was for the graduation cap: FastLED.addLeds<NEOPIXEL,DPIN_FASTLED>(led_display, NUM_LEDS_PER_DISK);
   FastLED.addLeds<WS2812B,DPIN_FASTLED,GRB>(led_display, NUM_LEDS_PER_DISK);
   FastLED.setBrightness(BRIGHTMAX); // we will do our own power management
-  // initialize led_display
+  // initialize led_display and put copy in SHADOW storage
   RBG_diskInitBrightSpots(windup1BrightSpots, &led_BLACK, 3, 196); // FIXME need initialize for this pattern
+  memcpy(&led_display[NUM_LEDS_PER_DISK], &led_display[0], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
 
   // get NTP time and install as local time then disconnect from WiFi
-  wifi_good = connectGetNtpInfoAndDisconnect(true, true);
-  if (false == wifi_good) {
-    Serial.println("\n\nERROR - Could not get NTP Time!");
-  }
+  connectGetNtpInfoAndDisconnect(DISCONNECT_WIFI, DEBUG_WIFI_NTP);
+  check_wifi_status();
 
   Serial.println("ESP32Clock initialized...");
 } // end setup()
@@ -212,6 +215,7 @@ void setup() {
 //
 void loop() {
   // put your main code here, to run repeatedly:
+  static int justReachedHour = false;
 
   myState.timerNow = millis();
 
@@ -221,17 +225,29 @@ void loop() {
     if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
       Serial.println(time_str);
       strncpy(time_past, time_str, STRF_NUMCHARS);
+
       // check if we reached the hour
-      if (NULL != strstr(time_str, ":00:00")) { // sigh... no strnstr
-        wifi_good = connectGetNtpInfoAndDisconnect(true, true);
+      justReachedHour = false;
+      if (NULL != strstr(time_str, " 00:00")) { // sigh... no strnstr
+        if (NULL != strstr(time_str, ":00:00")) {
+          justReachedHour = true;
+        }
+      } else if (NULL != strstr(time_str, ":00:00")) {
+        justReachedHour = true;
+      }
+      if (justReachedHour) {
+        connectGetNtpInfoAndDisconnect(DISCONNECT_WIFI, DEBUG_WIFI_NTP);
+        check_wifi_status();
       } // end if refresh NTP info once per hour
     } // end if the seconds field changed
-  }  
+  } else {
+    Serial.print("ERROR - getLocalTime() failed after ");
+    Serial.println(time_past);
+  }
 
   // display time on clock if it changed
-  // general LED patterns - if ((myState.timerNow-myState.timerPrevLEDstep) >= myState.ptrnDelayLEDstep) {
   if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
-    gHue += 3; // rotating "base color" used by Demo Reel 100 patterns
+  // general LED patterns - if ((myState.timerNow-myState.timerPrevLEDstep) >= myState.ptrnDelayLEDstep) {
 
     // update the clock
     checkDataGuard();
@@ -242,11 +258,12 @@ void loop() {
 
     // display on the LEDs
     FastLED.show();
-
-    // not done till the papaerwork is finished
-    myState.timerPrevLEDstep = myState.timerNow;
-    globalLoopCount += 1;
   } // end wait for next LED activity
+
+  // not done till the papaerwork is finished
+  myState.timerPrevLEDstep = myState.timerNow;
+  globalLoopCount += 1;
+  gHue += 3; // general LED patterns - rotating "base color" used by Demo Reel 100 patterns
 
   // delay before checking time again
   delay(50);
@@ -255,15 +272,23 @@ void loop() {
 
 // ******************************** WIFI AND TIME UTILITIES ********************************
 
+void check_wifi_status() {
+  if (false == wifi_good) {
+    Serial.println("\n\nERROR - Could not get WiFi and/or NTP Time!");
+  }
+} // end check_wifi_status()
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // connectGetNtpInfoAndDisconnect() - connect to WiFi (if needed), get NTP info, disconnect (if requested)
 //    if disconnectWifi then disconnect when done
 //    if doPrint then print status as we go
 //
-int connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
-  int success = false;
+//    GLOBAL wifi_good set true or false - NOT THREAD SAFE
+//
+void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
   int tries = 0;
 
+  wifi_good = false;
   if (WiFi.status() != WL_CONNECTED) {
     // Connect to the network
     if (false != doPrint) {
@@ -301,12 +326,12 @@ int connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
 
     if (getLocalTime(&tm_time)) {
       strftime(time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &tm_time);
-      success = true;
+      wifi_good = true;
     } else {
       if (false != doPrint) {
         Serial.print("\n\nERROR - getLocalTime() failed\n\n");
       } // end if doPrint
-      success = false;
+      wifi_good = false;
     }
   } // end if connected to WiFi
 
@@ -319,7 +344,6 @@ int connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
       } // end if doPrint
   } // end if need to disconnect WiFi
 
-  return(success);
 } // end connectGetNtpInfoAndDisconnect()
 
 
