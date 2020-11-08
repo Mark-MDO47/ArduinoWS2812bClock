@@ -159,7 +159,18 @@ static struct _myState_t {
 #define DEBUG_SHOW_MSEC 1                    // use globalLoopCount for millis() display not loopcount
 static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is either the milliseconds since startup or a count of times through loop()
 #define DPIN_FASTLED 23  // will need to experiment for my board: ESP32 ESP-32S CP2102 NodeMCU-32S ESP-WROOM-32 WiFi Unassembled https://smile.amazon.com/gp/product/B08DQQ8CBP/
-// GPIO23 is marked on this board as D23. With the USB on the bottom, it is pin number 15 from the bottom on the right hand side (top on RH side).
+                         // GPIO23 is marked on this board as D23. With the USB on the bottom, it is pin number 15 from the bottom on the right hand side (top on RH side).
+                         //
+                         // NOTE: https://github.com/FastLED/FastLED/issues/923
+                         // can ignore following PRAGMA message: 
+                         //      /Documents/Arduino/libraries/FastLED/fastspi.h:130:23: note: #pragma message: No hardware SPI pins defined. All SPI access will default to bitbanged output
+                         // kriegsman commented on Feb 4  
+                         //      The FastLED code for ESP32 uses the ESP32's dedicated "RMT" hardware unit to output the data signal, instead of the "SPI" hardware as is used on (e.g.) AVR microcontrollers.
+                         //      But FastLED on ESP32 doesn't actually 'manually bitbang' the data out using just software.
+                         //      So I think that since we are already using a hardware-assisted data output channel, we should probably just eliminate this message when that's the case.
+                         // bbulkow commented on Sep 15
+                         //      The warning actually states that SPI led strings - like the APA102 - will default to bitbanging.
+                         //      The RMT hardware can't be used for SPI leds, because it requires two wires of synchronization.
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
