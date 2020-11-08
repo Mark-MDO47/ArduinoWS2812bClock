@@ -247,7 +247,7 @@ void loop() {
 
   // display time on clock if it changed
   if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
-  // general LED patterns - if ((myState.timerNow-myState.timerPrevLEDstep) >= myState.ptrnDelayLEDstep) {
+  // general LED patterns - if ((myState.timerNow-myState.timerPrevLEDstep) >= myState.ptrnDelayLEDstep) { //
 
     // update the clock
     checkDataGuard();
@@ -283,12 +283,12 @@ void check_wifi_status() {
 //    if disconnectWifi then disconnect when done
 //    if doPrint then print status as we go
 //
-//    GLOBAL wifi_good set true or false - NOT THREAD SAFE
+//    GLOBAL wifi_good set true or false
 //
 void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
+  int wifi_success = false;
   int tries = 0;
 
-  wifi_good = false;
   if (WiFi.status() != WL_CONNECTED) {
     // Connect to the network
     if (false != doPrint) {
@@ -326,12 +326,12 @@ void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
 
     if (getLocalTime(&tm_time)) {
       strftime(time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &tm_time);
-      wifi_good = true;
+      wifi_success = true;
     } else {
       if (false != doPrint) {
         Serial.print("\n\nERROR - getLocalTime() failed\n\n");
       } // end if doPrint
-      wifi_good = false;
+      wifi_success = false;
     }
   } // end if connected to WiFi
 
@@ -344,6 +344,7 @@ void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
       } // end if doPrint
   } // end if need to disconnect WiFi
 
+  wifi_good = wifi_success;
 } // end connectGetNtpInfoAndDisconnect()
 
 
