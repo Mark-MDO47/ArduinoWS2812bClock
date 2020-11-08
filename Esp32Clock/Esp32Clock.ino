@@ -64,13 +64,13 @@ template <typename T> int sgn(T val) {
 
 // LED count - number of LEDs in each ring in order of serial access
 const uint16_t  leds_per_ring[NUM_RINGS_PER_DISK]  = { MAX_LEDS_PER_RING, 48, 40, 32, 24, 16, 12, 8, MIN_LEDS_PER_RING }; // MAX_LEDS_PER_RING = 60
-const uint8_t   start_per_ring[NUM_RINGS_PER_DISK] = {  0, 60, 108, 148, 180, 204, 220, 232, 240 }; // which LED index is the start of each ring
+const uint16_t   start_per_ring[NUM_RINGS_PER_DISK] = {  0, 60, 108, 148, 180, 204, 220, 232, 240 }; // which LED index is the start of each ring
 const uint16_t  leds_per_ringqrtr[NUM_RINGS_PER_DISK]  = { 15, 12, 10, 8, 6, 4, 3, 2, 1 }; // note: not too sure if last should be 0 or 1
-static int8_t   this_ring = 0; // from ring_9 (value 0, outer ring) to ring_1 (value 8, inner ring (one LED))
-static int8_t   this_qrtr = 0; // from qrtr_1 (value 0) to qrtr_4 (value 3), count modulo in either direction
+static uint16_t   this_ring = 0; // from ring_9 (value 0, outer ring) to ring_1 (value 8, inner ring (one LED))
+static uint16_t   this_qrtr = 0; // from qrtr_1 (value 0) to qrtr_4 (value 3), count modulo in either direction
 static uint32_t radar_xray_bitmask[(NUM_LEDS_PER_DISK+31)/32];  // bitmask where X-Ray LEDs are for STEP2_RADAR_XRAY_SHDW1; >= one bit per LED per ring
 static uint32_t bitmsk32; // used to pick out the bit in radar_xray_bitmask
-static uint8_t  idx_bitmsk32; // index to which array member for radar_xray_bitmask
+static uint16_t  idx_bitmsk32; // index to which array member for radar_xray_bitmask
 
 #define LED_TYPE     WS2812B
 #define COLOR_ORDER  GRB
@@ -144,22 +144,6 @@ static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is eithe
 #define DPIN_FASTLED 23  // will need to experiment for my board: ESP32 ESP-32S CP2102 NodeMCU-32S ESP-WROOM-32 WiFi Unassembled https://smile.amazon.com/gp/product/B08DQQ8CBP/
 // GPIO23 is marked on this board as D23. With the USB on the bottom, it is pin number 15 from the bottom on the right hand side (top on RH side).
 
-
-// radar_ring_idx describes the index within each ring of a moving second-hand or a leading edge of a radar sweep as it moves in a clockwise TBR direction
-// for ring 0 which has 60 LEDs, it is just a count of 0 through 59
-// others are computed by calculating MOD(ROUND(ring0num[idx]*NUM_LEDS_THIS_RING/MAX_LEDS_PER_RING,0),NUM_LEDS_THIS_RING)
-// we do NOT add the starting LED per ring from start_per_ring[]. The mod calculations for each ring as we go left and right are easier with the data in this form, without that addition
-static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
- { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59 },
- { 0, 1, 2, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 22, 23, 24, 25, 26, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 34, 35, 36, 37, 38, 38, 39, 40, 41, 42, 42, 43, 44, 45, 46, 46, 47 },
- { 0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 17, 17, 18, 19, 19, 20, 21, 21, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 30, 31, 31, 32, 33, 33, 34, 35, 35, 36, 37, 37, 38, 39, 39 },
- { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31 },
- { 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23, 0 },
- { 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 0 },
- { 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 0, 0 },
- { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 0, 0, 0 },
- { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-}; // end radar_ring_idx[][]
 
 void setup() {
   // put your setup code here, to run once:
@@ -613,6 +597,90 @@ void RBG_juggle_numdot_ring(int8_t numDots) { // pattern from Demo Reel 100
     } // end for rings
   } // end if rings or whole disk
 } // end RBG_juggle_numdot_ring()
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// radar_ring_idx[ring][sec] describes the index within each ring of a moving second-hand or a leading edge of a radar sweep as it moves in a clockwise TBR direction
+// for ring 0 which has 60 LEDs, it is just a count of 0 through 59
+// others are computed by calculating MOD(ROUND(ring0num[idx]*NUM_LEDS_THIS_RING/MAX_LEDS_PER_RING,0),NUM_LEDS_THIS_RING)
+// we do NOT add the starting LED per ring from start_per_ring[]. The mod calculations for each ring as we go left and right are easier with the data in this form, without that addition
+static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
+ { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59 },
+ { 0, 1, 2, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 22, 23, 24, 25, 26, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 34, 35, 36, 37, 38, 38, 39, 40, 41, 42, 42, 43, 44, 45, 46, 46, 47 },
+ { 0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 17, 17, 18, 19, 19, 20, 21, 21, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 30, 31, 31, 32, 33, 33, 34, 35, 35, 36, 37, 37, 38, 39, 39 },
+ { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31 },
+ { 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23, 0 },
+ { 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 0 },
+ { 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 0, 0 },
+ { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 0, 0, 0 },
+ { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+}; // end radar_ring_idx[][]
+static uint8_t radar_ring_previdx[NUM_RINGS_PER_DISK] = { MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING }; //
+#define TRUE_IDX(idx,ring) ((idx)%leds_per_ring[ring])+start_per_ring[ring]
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// RadarEffect()
+//    The idea is to use radar_ring_idx[ring][sec] for the "point" of the line on each ring. The rings are ordered outside first then going inside.
+//    There will be trailing and leading fade for the big rings 0-7. It will trail at 1/2, 1/4 and 1/8 intensity for three rings after the point.
+//    The lead will be zero when the point moves. Each time the point stays still the lead will be one LED at 1/2 intensity.
+// The background is the shadow area.
+// For now the direction is in the clockwise direction
+//
+void RadarEffect(uint8_t sec, CRGB* pColor) {
+  uint16_t ring;
+  uint16_t idx, idx2;
+
+  // make sure sec is valid; get the color of the sweep hand
+  sec %= 60;
+  led_tmp1 = *pColor;
+
+  // copy in the shadow
+  memcpy(&led_display[0], &led_display[NUM_LEDS_PER_DISK], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
+
+  for (ring = 0; ring < NUM_RINGS_PER_DISK; ring++) {
+    idx = TRUE_IDX(radar_ring_idx[ring][sec], ring);
+    // calculate color for the point of this ring
+    led_display[idx].red   = min(((uint16_t)led_display[idx].red)   + led_tmp1.red,   255);
+    led_display[idx].green = min(((uint16_t)led_display[idx].green) + led_tmp1.green, 255);
+    led_display[idx].blue  = min(((uint16_t)led_display[idx].blue)  + led_tmp1.blue,  255);
+    if ((ring < 7) && (idx != radar_ring_previdx[ring])) { // big rings do leading and trailing
+      // calculate 1/2 of color
+      led_tmp1.red >>= 1;
+      led_tmp1.green >>= 1;
+      led_tmp1.blue >>= 1;
+      // leading 1/2
+      idx2 = TRUE_IDX(1+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      // trailing 1/2
+      idx2 = TRUE_IDX(leds_per_ring[ring]-1+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      // trailing 1/4
+      // calculate 1/4 of color
+      led_tmp1.red >>= 1;
+      led_tmp1.green >>= 1;
+      led_tmp1.blue >>= 1;
+      idx2 = TRUE_IDX(leds_per_ring[ring]-2+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      // trailing 1/8
+      // calculate 1/8 of color
+      led_tmp1.red >>= 1;
+      led_tmp1.green >>= 1;
+      led_tmp1.blue >>= 1;
+      idx2 = TRUE_IDX(leds_per_ring[ring]-3+radar_ring_idx[ring][sec], ring);
+      led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
+      led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
+      led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+    } // end if a big ring
+    radar_ring_previdx[ring] = idx;
+  } // end for all rings
+  
+}; // end RadarEffect()
+
+
 
 // ******************************** DEBUG UTILITIES ********************************
 
