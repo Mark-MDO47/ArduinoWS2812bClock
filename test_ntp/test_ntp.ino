@@ -62,7 +62,7 @@ void loop() {
       Serial.println(time_str);
       strncpy(time_past, time_str, STRF_NUMCHARS);
       if (NULL != strstr(time_str, ":00")) { // DEBUG: check every minute
-      // if (NULL != strstr(time_str, ":00:")) { // sigh... no strnstr
+      // if (NULL != strstr(time_str, ":00:00")) { // sigh... no strnstr
         wifi_good = connectGetNtpInfoAndDisconnect(true, true);
       } // end if refresh NTP info once per hour
     } // end if the seconds field changed
