@@ -49,7 +49,7 @@ const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = -8*3600; // UTC is 8 hours prior to Los Angeles
 const int   daylightOffset_sec = 3600; // DST moves us one hour
 
-static struct tm tm_time;
+static struct tm g_tm_time;
 #define STRF_NUMCHARS 20 // for strftime "%d %H:%M:%S" (actually takes 12 chars)
 static char time_connect[STRF_NUMCHARS]; // last time we refreshed NTP time info
 static char time_past[STRF_NUMCHARS];    // last time one second changed
@@ -176,6 +176,21 @@ static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is eithe
                          //      The warning actually states that SPI led strings - like the APA102 - will default to bitbanging.
                          //      The RMT hardware can't be used for SPI leds, because it requires two wires of synchronization.
 
+#define CLOCK_STYLE_DIGITAL 1
+#define CLOCK_STYLE_ANALOG  2
+
+#define CLOCK_STYLE_TOLL_FLASH 1
+
+typedef struct {
+  uint8_t style_ana_dig;
+  uint8_t style_toll; // ask not for whom the clock tolls...
+} clock_style_struct_t;
+
+static clock_style_struct_t g_clock_style = {
+  .style_ana_dig= CLOCK_STYLE_ANALOG,
+  .style_toll=    CLOCK_STYLE_TOLL_FLASH
+};
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // setup()
@@ -220,8 +235,8 @@ void loop() {
   myState.timerNow = millis();
 
   // update our time; connect to WiFi and NTP as needed
-  if (getLocalTime(&tm_time)) {
-    strftime(time_str, STRF_NUMCHARS, "%d %H:%M:%S", &tm_time);
+  if (getLocalTime(&g_tm_time)) {
+    strftime(time_str, STRF_NUMCHARS, "%d %H:%M:%S", &g_tm_time);
     if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
       Serial.println(time_str);
       strncpy(time_past, time_str, STRF_NUMCHARS);
@@ -252,7 +267,7 @@ void loop() {
     // update the clock
     checkDataGuard();
     updateClockTime(time_str);
-    RadarEffect((uint8_t) tm_time.tm_sec, &led_RED);
+    displayClockTime();
     // general LED patterns - doPattern(myState.efctLED, 0); // start
     checkDataGuard();
 
@@ -324,8 +339,8 @@ void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
     //
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-    if (getLocalTime(&tm_time)) {
-      strftime(time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &tm_time);
+    if (getLocalTime(&g_tm_time)) {
+      strftime(time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &g_tm_time);
       wifi_success = true;
     } else {
       if (false != doPrint) {
@@ -370,6 +385,78 @@ void updateClockTime(char * pTime) {
   // TBS FIXME
 } // 
 
+/*   DELETE_ME
+typedef struct {
+  uint8_t style_ana_dig;
+  uint8_t style_toll; // ask not for whom the clock tolls...
+} clock_style_struct_t;
+#define CLOCK_STYLE_DIGITAL 1
+#define CLOCK_STYLE_ANALOG  2
+#define CLOCK_STYLE_TOLL_FLASH 1
+*/
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// displayClockTime()
+//    display time as analog or digital with correct styling
+//
+void displayClockTime() {
+  // copy in the "face" from the shadow area
+  memcpy(&led_display[NUM_LEDS_PER_DISK], &led_display[0], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
+
+  if (g_clock_style.style_ana_dig == CLOCK_STYLE_DIGITAL) {
+    // TBS FIXME
+    displaySecondHand((uint8_t) g_tm_time.tm_sec, &led_RED);
+  } else if (g_clock_style.style_ana_dig == CLOCK_STYLE_ANALOG) {
+    displayHourHand((uint16_t) g_tm_time.tm_hour, (uint8_t) g_tm_time.tm_min, &led_GREEN);
+    displayMinuteHand((uint8_t) g_tm_time.tm_min, &led_BLUE);
+    displaySecondHand((uint8_t) g_tm_time.tm_sec, &led_RED);
+  } else {
+    Serial.print("\n\nERROR - Illegal g_clock_style.style_ana_dig");
+    Serial.println(g_clock_style.style_ana_dig);
+    Serial.println("\n");
+  }
+} // end displayClockTime()
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// displaySecondHand()
+//    display the second hand in the correct style
+//
+void displaySecondHand(uint8_t theSec, CRGB* pColor) { // second is a known word in Arduino
+  effectStickRadar(theSec, pColor, NUM_RINGS_PER_DISK);
+} // end displaySecondHand()
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// displayMinuteHand()
+//    display the minute hand in the correct style
+//
+void displayMinuteHand(uint8_t theMin, CRGB* pColor) { // minute is a known word in Arduino
+  effectStick(theMin, pColor, NUM_RINGS_PER_DISK-1);
+} // end displaySecondHand()
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// displayHourHand()
+//    display the hour hand in the correct style
+//
+void displayHourHand(uint16_t theHour, uint8_t theMin, CRGB* pColor) {
+  float approxAngle;
+  // units are fractions of clock face in 1/60 of a circle (6 degrees)
+  // the hour hand will be obvious if we don't include minutes in our approximation
+  // approxAngle = ROUND(5*MOD(theHour,12)+(theMin/12),0)
+  // in our case, the numbers are always positive so we add 0.5 and truncate
+  approxAngle = theMin / 12.0;
+  approxAngle += (theHour %12)*5;
+  effectStick((uint8_t)(approxAngle+0.5), pColor, NUM_RINGS_PER_DISK-2);
+} // end displayHourHand()
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// displayClockToll()
+//    display Clock Tolling with correct styling
+//
+void displayClockToll() {
+  // TBS FIXME
+} // end displayClockToll()
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // radar_ring_idx[ring][sec] describes the index within each ring of a moving second-hand or a leading edge of a radar sweep as it moves in a clockwise TBR direction
 // for ring 0 which has 60 LEDs, it is just a count of 0 through 59
@@ -389,14 +476,14 @@ static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
 static uint8_t radar_ring_previdx[NUM_RINGS_PER_DISK] = { MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING, MAX_LEDS_PER_RING }; //
 #define TRUE_IDX(idx,ring) ((idx)%leds_per_ring[ring])+start_per_ring[ring]
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-// RadarEffect()
+// effectStickRadar()
 //    The idea is to use radar_ring_idx[ring][sec] for the "point" of the line on each ring. The rings are ordered outside first then going inside.
 //    There will be trailing and leading fade for the big rings 0-7. It will trail at 1/2, 1/4 and 1/8 intensity for three rings after the point.
 //    The lead will be zero when the point moves. Each time the point stays still the lead will be one LED at 1/2 intensity.
 // The background is the shadow area.
 // For now the direction is in the clockwise direction
 //
-void RadarEffect(uint8_t sec, CRGB* pColor) {
+void effectStickRadar(uint8_t sec, CRGB* pColor, uint8_t numRings) {
   uint16_t ring;
   uint16_t idx, idx2;
 
@@ -404,10 +491,7 @@ void RadarEffect(uint8_t sec, CRGB* pColor) {
   sec %= 60;
   led_tmp1 = *pColor;
 
-  // copy in the shadow
-  memcpy(&led_display[0], &led_display[NUM_LEDS_PER_DISK], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
-
-  for (ring = 0; ring < NUM_RINGS_PER_DISK; ring++) {
+  for (ring = 0; ring < numRings; ring++) {
     idx = TRUE_IDX(radar_ring_idx[ring][sec], ring);
     // calculate color for the point of this ring
     led_display[idx].red   = min(((uint16_t)led_display[idx].red)   + led_tmp1.red,   255);
@@ -447,10 +531,34 @@ void RadarEffect(uint8_t sec, CRGB* pColor) {
       led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
       led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
     } // end if a big ring
-    radar_ring_previdx[ring] = idx;
+    radar_ring_previdx[ring] = idx; // FIXME - only works for one stick
   } // end for all rings
-  
-}; // end RadarEffect()
+}; // end effectStickRadar()
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// effectStick()
+//    The idea is to use radar_ring_idx[ring][sec] for the "point" of the line on each ring. The rings are ordered outside (big) first then going inside.
+// The background is the shadow area.
+// For now the direction is in the clockwise direction
+// units = direction of stick in 1/60 of a circle
+//
+void effectStick(uint8_t units, CRGB* pColor, uint8_t numRings) {
+  uint16_t ring;
+  uint16_t idx, idx2;
+
+  // make sure sec is valid; get the color of the sweep hand
+  units %= 60;
+  led_tmp1 = *pColor;
+
+  for (ring = 0; ring < numRings; ring++) {
+    idx = TRUE_IDX(radar_ring_idx[ring][units], ring);
+    // calculate color for the point of this ring
+    led_display[idx].red   = min(((uint16_t)led_display[idx].red)   + led_tmp1.red,   255);
+    led_display[idx].green = min(((uint16_t)led_display[idx].green) + led_tmp1.green, 255);
+    led_display[idx].blue  = min(((uint16_t)led_display[idx].blue)  + led_tmp1.blue,  255);
+  } // end for all rings
+}; // end effectStick()
+
 
 
 // ******************************** LED UTILITIES ****************************************
