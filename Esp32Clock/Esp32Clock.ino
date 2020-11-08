@@ -51,10 +51,10 @@ const int   daylightOffset_sec = 3600; // DST moves us one hour
 
 static struct tm g_tm_time;
 #define STRF_NUMCHARS 20 // for strftime "%d %H:%M:%S" (actually takes 12 chars)
-static char time_connect[STRF_NUMCHARS]; // last time we refreshed NTP time info
-static char time_past[STRF_NUMCHARS];    // last time one second changed
-static char time_str[STRF_NUMCHARS];     // this time
-static int8_t wifi_good = false;         // true if connected to WiFi
+static char g_time_connect[STRF_NUMCHARS]; // last time we refreshed NTP time info
+static char g_time_past[STRF_NUMCHARS];    // last time one second changed
+static char g_time_str[STRF_NUMCHARS];     // this time
+static int8_t g_wifi_good = false;         // true if connected to WiFi
 
 
 #define mEFCT_PTRNLED_OFF 254
@@ -83,11 +83,9 @@ template <typename T> int sgn(T val) {
 const uint16_t  leds_per_ring[NUM_RINGS_PER_DISK]  = { MAX_LEDS_PER_RING, 48, 40, 32, 24, 16, 12, 8, MIN_LEDS_PER_RING }; // MAX_LEDS_PER_RING = 60
 const uint16_t   start_per_ring[NUM_RINGS_PER_DISK] = {  0, 60, 108, 148, 180, 204, 220, 232, 240 }; // which LED index is the start of each ring
 const uint16_t  leds_per_ringqrtr[NUM_RINGS_PER_DISK]  = { 15, 12, 10, 8, 6, 4, 3, 2, 1 }; // note: not too sure if last should be 0 or 1
-static uint16_t   this_ring = 0; // from ring_9 (value 0, outer ring) to ring_1 (value 8, inner ring (one LED))
-static uint16_t   this_qrtr = 0; // from qrtr_1 (value 0) to qrtr_4 (value 3), count modulo in either direction
-static uint32_t radar_xray_bitmask[(NUM_LEDS_PER_DISK+31)/32];  // bitmask where X-Ray LEDs are for STEP2_RADAR_XRAY_SHDW1; >= one bit per LED per ring
-static uint32_t bitmsk32; // used to pick out the bit in radar_xray_bitmask
-static uint16_t  idx_bitmsk32; // index to which array member for radar_xray_bitmask
+static uint32_t g_radar_xray_bitmask[(NUM_LEDS_PER_DISK+31)/32];  // bitmask where X-Ray LEDs are for STEP2_RADAR_XRAY_SHDW1; >= one bit per LED per ring
+static uint32_t bitmsk32; // used to pick out the bit in g_radar_xray_bitmask
+static uint16_t  idx_bitmsk32; // index to which array member for g_radar_xray_bitmask
 
 #define LED_TYPE     WS2812B
 #define COLOR_ORDER  GRB
@@ -113,7 +111,7 @@ typedef struct _brightSpots_t {
 } brightSpots_t; // end definition
 
 // for RBG_rotateRingAndFade(), only need to do ring 0 and others follow suit
-static brightSpots_t windup1BrightSpots[] = {
+static brightSpots_t g_setupBrightSpots[] = {
   { .posn=0, .hue=CRGB::Red },
   { .posn=6, .hue=CRGB::Green },
   { .posn=12, .hue=CRGB::Blue },
@@ -125,7 +123,7 @@ static brightSpots_t windup1BrightSpots[] = {
   { .posn=48, .hue=CRGB::Red },
   { .posn=54, .hue=CRGB::Green },
   { .posn=mNONE, .hue=CRGB::Black },
-}; // end windup1BrightSpots[] definition
+}; // end g_setupBrightSpots[] definition
 
 static uint8_t gHue = 0; // rotating "base color" used by Demo Reel 100
 static uint16_t gSeed = ((uint16_t) 42); // my favorite is 47 but the whole world loves 42 and HHG2TG
@@ -153,7 +151,7 @@ static struct _myState_t {
   uint16_t ptrnDelayLEDstep = 7;    // proper delta delay for Mark's patterns
   uint16_t efctLED = 3;             // which effect to perform
 
-} myState;
+} g_myState;
 
 #define DEBUGALL_GLOBAL 0                    // sets ALL debug flags at once
 #define DEBUG_WIFI_NTP  true                 // shows the steps for NTP time acquisition
@@ -204,7 +202,7 @@ void setup() {
   Serial.begin(115200);         
   delay(10);
 
-  for (int i = 0; i < NUMOF(radar_xray_bitmask); i++) { radar_xray_bitmask[i] = 0; } // TBS FIXME maybe not used
+  for (int i = 0; i < NUMOF(g_radar_xray_bitmask); i++) { g_radar_xray_bitmask[i] = 0; } // TBS FIXME maybe not used
 
   // initialize the FastLED library for our setup
   // according to Amazon comments: Library configuration used was WS2812B GRB (not RGB). Library call: FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);. Everything worked as expected.
@@ -212,7 +210,7 @@ void setup() {
   FastLED.addLeds<WS2812B,DPIN_FASTLED,GRB>(led_display, NUM_LEDS_PER_DISK);
   FastLED.setBrightness(BRIGHTMAX); // we will do our own power management
   // initialize led_display and put copy in SHADOW storage
-  RBG_diskInitBrightSpots(windup1BrightSpots, &led_BLACK, 3, 196); // FIXME need initialize for this pattern
+  RBG_diskInitBrightSpots(g_setupBrightSpots, &led_BLACK, 3, 196); // FIXME need initialize for this pattern
   memcpy(&led_display[NUM_LEDS_PER_DISK], &led_display[0], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
 
   // get NTP time and install as local time then disconnect from WiFi
@@ -232,24 +230,18 @@ void loop() {
   // put your main code here, to run repeatedly:
   static int justReachedHour = false;
 
-  myState.timerNow = millis();
+  g_myState.timerNow = millis();
 
   // update our time; connect to WiFi and NTP as needed
   if (getLocalTime(&g_tm_time)) {
-    strftime(time_str, STRF_NUMCHARS, "%d %H:%M:%S", &g_tm_time);
-    if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
-      Serial.println(time_str);
-      strncpy(time_past, time_str, STRF_NUMCHARS);
+    strftime(g_time_str, STRF_NUMCHARS, "%d %H:%M:%S", &g_tm_time);
+    if (0 != strncmp(g_time_past, g_time_str, STRF_NUMCHARS)) {
+      Serial.print("Eclk ");
+      Serial.println(g_time_str);
+      strncpy(g_time_past, g_time_str, STRF_NUMCHARS);
 
       // check if we reached the hour
-      justReachedHour = false;
-      if (NULL != strstr(time_str, " 00:00")) { // sigh... no strnstr
-        if (NULL != strstr(time_str, ":00:00")) {
-          justReachedHour = true;
-        }
-      } else if (NULL != strstr(time_str, ":00:00")) {
-        justReachedHour = true;
-      }
+      justReachedHour = (0 == g_tm_time.tm_sec) && (0 == g_tm_time.tm_min);
       if (justReachedHour) {
         connectGetNtpInfoAndDisconnect(DISCONNECT_WIFI, DEBUG_WIFI_NTP);
         check_wifi_status();
@@ -257,18 +249,18 @@ void loop() {
     } // end if the seconds field changed
   } else {
     Serial.print("ERROR - getLocalTime() failed after ");
-    Serial.println(time_past);
+    Serial.println(g_time_past);
   }
 
   // display time on clock if it changed
-  if (0 != strncmp(time_past, time_str, STRF_NUMCHARS)) {
-  // general LED patterns - if ((myState.timerNow-myState.timerPrevLEDstep) >= myState.ptrnDelayLEDstep) { //
+  if (0 != strncmp(g_time_past, g_time_str, STRF_NUMCHARS)) {
+  // general LED patterns - if ((g_myState.timerNow-g_myState.timerPrevLEDstep) >= g_myState.ptrnDelayLEDstep) { //
 
     // update the clock
     checkDataGuard();
-    updateClockTime(time_str);
+    updateClockTime(g_time_str);
     displayClockTime();
-    // general LED patterns - doPattern(myState.efctLED, 0); // start
+    // general LED patterns - doPattern(g_myState.efctLED, 0); // start
     checkDataGuard();
 
     // display on the LEDs
@@ -276,7 +268,7 @@ void loop() {
   } // end wait for next LED activity
 
   // not done till the papaerwork is finished
-  myState.timerPrevLEDstep = myState.timerNow;
+  g_myState.timerPrevLEDstep = g_myState.timerNow;
   globalLoopCount += 1;
   gHue += 3; // general LED patterns - rotating "base color" used by Demo Reel 100 patterns
 
@@ -288,7 +280,7 @@ void loop() {
 // ******************************** WIFI AND TIME UTILITIES ********************************
 
 void check_wifi_status() {
-  if (false == wifi_good) {
+  if (false == g_wifi_good) {
     Serial.println("\n\nERROR - Could not get WiFi and/or NTP Time!");
   }
 } // end check_wifi_status()
@@ -298,7 +290,7 @@ void check_wifi_status() {
 //    if disconnectWifi then disconnect when done
 //    if doPrint then print status as we go
 //
-//    GLOBAL wifi_good set true or false
+//    GLOBAL g_wifi_good set true or false
 //
 void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
   int wifi_success = false;
@@ -340,7 +332,7 @@ void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
     if (getLocalTime(&g_tm_time)) {
-      strftime(time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &g_tm_time);
+      strftime(g_time_connect, STRF_NUMCHARS, "%d %H:%M:%S", &g_tm_time);
       wifi_success = true;
     } else {
       if (false != doPrint) {
@@ -359,7 +351,7 @@ void connectGetNtpInfoAndDisconnect(int disconnectWifi, int doPrint) {
       } // end if doPrint
   } // end if need to disconnect WiFi
 
-  wifi_good = wifi_success;
+  g_wifi_good = wifi_success;
 } // end connectGetNtpInfoAndDisconnect()
 
 
@@ -591,7 +583,7 @@ void doPattern(uint16_t nowEfctLED, uint8_t tmpInit) {
 
     case 4: // RBG_diskDownTheDrainOrRotate(-1) disk, clockwise, rotate through
       if (0 != tmpInit) { // initialize
-        RBG_ringRotateAndFade(mNONE, 0, windup1BrightSpots); // FIXME - initialization from other effect
+        RBG_ringRotateAndFade(mNONE, 0, g_setupBrightSpots); // FIXME - initialization from other effect
         RBG_diskDownTheDrainOrRotate(0);
       } else { // step
         RBG_diskDownTheDrainOrRotate(-1);
@@ -600,7 +592,7 @@ void doPattern(uint16_t nowEfctLED, uint8_t tmpInit) {
 
     case 5: // RBG_diskDownTheDrainOrRotate(2) disk, counterclockwise, drain, repeat
       if ((0 != tmpInit) || (numSteps > (10+NUM_LEDS_PER_DISK))) { // initialize
-        RBG_ringRotateAndFade(mNONE, 0, windup1BrightSpots); // FIXME - initialization from other effect
+        RBG_ringRotateAndFade(mNONE, 0, g_setupBrightSpots); // FIXME - initialization from other effect
         numSteps = 0;
       } else { // step
         RBG_diskDownTheDrainOrRotate(2);
@@ -688,7 +680,7 @@ void RBG_diskDownTheDrainOrRotate(int8_t direction) {
 
   if (direction > (NUM_RINGS_PER_DISK-1)) {
     // initialize
-    myState.ptrnDelayLEDstep = DLYLED_diskDownTheDrain;
+    g_myState.ptrnDelayLEDstep = DLYLED_diskDownTheDrain;
   } else {
     // do pattern
     RBG_diskRotateOrDrain(direction, &led_BLACK);
@@ -720,7 +712,7 @@ void RBG_ringRotateAndFade(uint8_t whichRing, int8_t rotateLcm, void *tmpPtr) {
     #ifdef DEBUG_RRandF
     Serial.print(F(" DEBUG_RRandF initialize whichRing=")); Serial.println(whichRing);
     #endif // DEBUG_RRandF
-    myState.ptrnDelayLEDstep = DLYLED_ringRotateAndFade;
+    g_myState.ptrnDelayLEDstep = DLYLED_ringRotateAndFade;
     RBG_diskInitBrightSpots(brightSpots, &led_BLACK, -3, 196);
     for (idx=0; idx < NUM_RINGS_PER_DISK; idx++) {
       startLocPerRing[idx] = 0;
@@ -861,11 +853,11 @@ void RBG_RailGunEffect(uint8_t myInit, CRGB* pColor) {
   uint8_t idx;
 
 #if DEBUG_RBG_RailGunEffect
-  Serial.print(F("DEBUG rail BEFORE myInit=")); Serial.print(myInit); Serial.print(F(" myStep=")); Serial.print(myStep); Serial.print(F(" ptrnDelayLEDstep=")); Serial.print(myState.ptrnDelayLEDstep); Serial.print(F(" millis()=")); Serial.print(millis()); Serial.print(F(" timerNow=")); Serial.print(myState.timerNow); Serial.print(F(" timerPrevLEDstep=")); Serial.print(myState.timerPrevLEDstep); Serial.print(F(" lastState=")); Serial.println(lastState);
+  Serial.print(F("DEBUG rail BEFORE myInit=")); Serial.print(myInit); Serial.print(F(" myStep=")); Serial.print(myStep); Serial.print(F(" ptrnDelayLEDstep=")); Serial.print(g_myState.ptrnDelayLEDstep); Serial.print(F(" millis()=")); Serial.print(millis()); Serial.print(F(" timerNow=")); Serial.print(g_myState.timerNow); Serial.print(F(" timerPrevLEDstep=")); Serial.print(g_myState.timerPrevLEDstep); Serial.print(F(" lastState=")); Serial.println(lastState);
 #endif // DEBUG_RBG_RailGunEffect
   if (0 != myInit) {
     myStep = 0;
-    myState.ptrnDelayLEDstep = 25;
+    g_myState.ptrnDelayLEDstep = 25;
     lastState = -1; // DEBUG
     for (idx = 0; idx < NUM_LEDS_PER_DISK; idx++) { led_display[idx] = led_BLACK; }
   } else {
@@ -897,9 +889,9 @@ void RBG_RailGunEffect(uint8_t myInit, CRGB* pColor) {
           break;
         case 3: // do speed-up and set ring[0] black for next cycle
           if (myStep < 8*4*1) {
-            myState.ptrnDelayLEDstep = 16; // speed it up
+            g_myState.ptrnDelayLEDstep = 16; // speed it up
           } else if (myStep < 8*4*2) {
-            myState.ptrnDelayLEDstep = 7; // speed it up
+            g_myState.ptrnDelayLEDstep = 7; // speed it up
           }
           for (idx = start_per_ring[0]; idx < start_per_ring[0]+leds_per_ring[0]; idx++) {
             led_display[idx] = led_BLACK;
@@ -917,7 +909,7 @@ void RBG_RailGunEffect(uint8_t myInit, CRGB* pColor) {
     } // end if lots of steps
   } // end if not initialization
 #if DEBUG_RBG_RailGunEffect
-  Serial.print(F("DEBUG rail AFTER  myInit=")); Serial.print(myInit); Serial.print(F(" myStep=")); Serial.print(myStep); Serial.print(F(" ptrnDelayLEDstep=")); Serial.print(myState.ptrnDelayLEDstep); Serial.print(F(" millis()=")); Serial.print(millis()); Serial.print(F(" timerNow=")); Serial.print(myState.timerNow); Serial.print(F(" timerPrevLEDstep=")); Serial.print(myState.timerPrevLEDstep); Serial.print(F(" lastState=")); Serial.println(lastState);
+  Serial.print(F("DEBUG rail AFTER  myInit=")); Serial.print(myInit); Serial.print(F(" myStep=")); Serial.print(myStep); Serial.print(F(" ptrnDelayLEDstep=")); Serial.print(g_myState.ptrnDelayLEDstep); Serial.print(F(" millis()=")); Serial.print(millis()); Serial.print(F(" timerNow=")); Serial.print(g_myState.timerNow); Serial.print(F(" timerPrevLEDstep=")); Serial.print(g_myState.timerPrevLEDstep); Serial.print(F(" lastState=")); Serial.println(lastState);
 #endif // DEBUG_RBG_RailGunEffect
 } // end RBG_RailGunEffect()
 
