@@ -36,8 +36,6 @@ F 3 "" H 2700 5150 60  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	3400 5300 3700 5300
-Wire Wire Line
 	1900 5300 2200 5300
 Wire Wire Line
 	7750 3750 8150 3750
@@ -80,23 +78,6 @@ F 3 "" H 1650 4900 50  0001 C CNN
 $EndComp
 Wire Wire Line
 	1300 4900 1450 4900
-$Comp
-L Device:C C?
-U 1 1 5F4A44E0
-P 3700 5100
-F 0 "C?" H 3815 5146 50  0000 L CNN
-F 1 "100uF" H 3815 5055 50  0000 L CNN
-F 2 "" H 3738 4950 50  0001 C CNN
-F 3 "~" H 3700 5100 50  0001 C CNN
-	1    3700 5100
-	1    0    0    -1  
-$EndComp
-Wire Wire Line
-	3700 4950 3700 4900
-Wire Wire Line
-	3700 4900 3400 4900
-Wire Wire Line
-	3700 5250 3700 5300
 Wire Wire Line
 	1900 5300 1900 5650
 Wire Wire Line
@@ -175,14 +156,8 @@ Wire Wire Line
 	6300 5300 8950 5300
 Wire Wire Line
 	8950 2800 8950 5300
-Wire Wire Line
-	3800 4900 3700 4900
 Connection ~ 3800 4900
-Connection ~ 3700 4900
-Wire Wire Line
-	5700 5300 3700 5300
 Connection ~ 5700 5300
-Connection ~ 3700 5300
 $Comp
 L Device:CP C?
 U 1 1 5FAB839B
@@ -236,4 +211,29 @@ Wire Wire Line
 	3550 3400 3550 3800
 Wire Wire Line
 	3150 3350 3150 3800
+$Comp
+L Device:CP C?
+U 1 1 5FAB87B5
+P 3550 5100
+F 0 "C?" H 3668 5146 50  0000 L CNN
+F 1 "100 uF" H 3668 5055 50  0000 L CNN
+F 2 "" H 3588 4950 50  0001 C CNN
+F 3 "~" H 3550 5100 50  0001 C CNN
+	1    3550 5100
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	3400 5300 3550 5300
+Wire Wire Line
+	3400 4900 3550 4900
+Wire Wire Line
+	3550 4950 3550 4900
+Connection ~ 3550 4900
+Wire Wire Line
+	3550 4900 3800 4900
+Wire Wire Line
+	3550 5250 3550 5300
+Connection ~ 3550 5300
+Wire Wire Line
+	3550 5300 5700 5300
 $EndSCHEMATC

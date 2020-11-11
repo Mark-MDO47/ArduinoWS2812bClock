@@ -1,5 +1,4 @@
 (sym_lib_table
-  (lib (name RubberBandGun-rescue)(type Legacy)(uri ${KIPRJMOD}/RubberBandGun-rescue.lib)(options "")(descr ""))
   (lib (name switches)(type Legacy)(uri ${KICAD_SYMBOL_DIR}/switches.lib)(options "")(descr ""))
   (lib (name relays)(type Legacy)(uri ${KICAD_SYMBOL_DIR}/relays.lib)(options "")(descr ""))
   (lib (name motors)(type Legacy)(uri ${KICAD_SYMBOL_DIR}/motors.lib)(options "")(descr ""))

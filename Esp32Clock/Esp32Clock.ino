@@ -153,7 +153,7 @@ static struct _myState_t {
 
 } g_myState;
 
-#define DEBUGALL_GLOBAL 1                    // sets ALL debug flags at once
+#define DEBUGALL_GLOBAL 0                    // sets ALL debug flags at once
 #define DEBUG_WIFI_NTP  true                 // shows the steps for NTP time acquisition
 #define DEBUG_SHOW_MSEC 1                    // use globalLoopCount for millis() display not loopcount
 static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is either the milliseconds since startup or a count of times through loop()
@@ -166,11 +166,11 @@ static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is eithe
                          // NOTE: https://github.com/FastLED/FastLED/issues/923
                          // can ignore following PRAGMA message: 
                          //      /Documents/Arduino/libraries/FastLED/fastspi.h:130:23: note: #pragma message: No hardware SPI pins defined. All SPI access will default to bitbanged output
-                         // kriegsman commented on Feb 4  
+                         // kriegsman commented on Feb 4 2020
                          //      The FastLED code for ESP32 uses the ESP32's dedicated "RMT" hardware unit to output the data signal, instead of the "SPI" hardware as is used on (e.g.) AVR microcontrollers.
                          //      But FastLED on ESP32 doesn't actually 'manually bitbang' the data out using just software.
                          //      So I think that since we are already using a hardware-assisted data output channel, we should probably just eliminate this message when that's the case.
-                         // bbulkow commented on Sep 15
+                         // bbulkow commented on Sep 15 2020
                          //      The warning actually states that SPI led strings - like the APA102 - will default to bitbanging.
                          //      The RMT hardware can't be used for SPI leds, because it requires two wires of synchronization.
 
@@ -269,7 +269,7 @@ void loop() {
     FastLED.show();
   } // end wait for next LED activity
 
-  // not done till the papaerwork is finished
+  // not done till the paperwork is finished
   strncpy(g_time_past, g_time_str, STRF_NUMCHARS);
   g_myState.timerPrevLEDstep = g_myState.timerNow;
   globalLoopCount += 1;
@@ -282,6 +282,11 @@ void loop() {
 
 // ******************************** WIFI AND TIME UTILITIES ********************************
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// check_wifi_status - handle wifi errors
+//
+//    GLOBAL g_wifi_good
+//
 void check_wifi_status() {
   if (false == g_wifi_good) {
     Serial.println("\n\nERROR - Could not get WiFi and/or NTP Time!");
