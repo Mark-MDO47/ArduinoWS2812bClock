@@ -81,17 +81,6 @@ $EndComp
 Wire Wire Line
 	1300 4900 1450 4900
 $Comp
-L Device:R R?
-U 1 1 5F41D9F7
-P 7900 2800
-F 0 "R?" V 7980 2800 50  0000 C CNN
-F 1 "220 ohm" V 7800 2800 50  0000 C CNN
-F 2 "" V 7830 2800 50  0001 C CNN
-F 3 "" H 7900 2800 50  0001 C CNN
-	1    7900 2800
-	-1   0    0    1   
-$EndComp
-$Comp
 L Device:C C?
 U 1 1 5F4A44E0
 P 3700 5100
@@ -126,11 +115,7 @@ $EndComp
 Wire Wire Line
 	4050 3900 3800 3900
 Wire Wire Line
-	7900 2500 7900 2650
-Wire Wire Line
 	5450 2500 7900 2500
-Wire Wire Line
-	7900 2950 7900 3850
 Wire Wire Line
 	7900 3850 7750 3850
 $Comp
@@ -198,4 +183,57 @@ Wire Wire Line
 	5700 5300 3700 5300
 Connection ~ 5700 5300
 Connection ~ 3700 5300
+$Comp
+L Device:CP C?
+U 1 1 5FAB839B
+P 3550 3250
+F 0 "C?" H 3668 3296 50  0000 L CNN
+F 1 "0.1 uF" H 3668 3205 50  0000 L CNN
+F 2 "" H 3588 3100 50  0001 C CNN
+F 3 "~" H 3550 3250 50  0001 C CNN
+	1    3550 3250
+	1    0    0    -1  
+$EndComp
+$Comp
+L Device:R_Small_US R?
+U 1 1 5FAB9240
+P 3150 3250
+F 0 "R?" H 3218 3296 50  0000 L CNN
+F 1 "10K" H 3218 3205 50  0000 L CNN
+F 2 "" H 3150 3250 50  0001 C CNN
+F 3 "~" H 3150 3250 50  0001 C CNN
+	1    3150 3250
+	1    0    0    -1  
+$EndComp
+$Comp
+L Device:R_Small_US R?
+U 1 1 5FAB9F1B
+P 7900 2800
+F 0 "R?" H 7968 2846 50  0000 L CNN
+F 1 "220 ohm" H 7968 2755 50  0000 L CNN
+F 2 "" H 7900 2800 50  0001 C CNN
+F 3 "~" H 7900 2800 50  0001 C CNN
+	1    7900 2800
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7900 2500 7900 2700
+Wire Wire Line
+	7900 2900 7900 3850
+Connection ~ 3550 3800
+Wire Wire Line
+	3150 3800 3550 3800
+Wire Wire Line
+	3150 2500 3150 3150
+Wire Wire Line
+	3150 2500 3550 2500
+Wire Wire Line
+	3550 2500 3550 3100
+Connection ~ 3550 2500
+Wire Wire Line
+	3550 2500 4050 2500
+Wire Wire Line
+	3550 3400 3550 3800
+Wire Wire Line
+	3150 3350 3150 3800
 $EndSCHEMATC
