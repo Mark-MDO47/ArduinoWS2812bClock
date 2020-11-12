@@ -72,6 +72,7 @@ CRGB colorLED[4] = { CRGB::Black, CRGB::Red, CRGB::Green, CRGB::Blue };
 //   initializes FastLED
 void setup() {
   // put your setup code here, to run once:
+  pinMode(DPIN_FASTLED, OUTPUT);
   Serial.begin(115200);         
   delay(1000);
 
@@ -87,6 +88,7 @@ void setup() {
 }
 
 void loop() {
+  uint16_t idx;
   // put your main code here, to run repeatedly:
   Serial.println(colorName[color_idx]);
   FastLED.show();
@@ -95,9 +97,10 @@ void loop() {
   if (color_idx >= NUMOF(colorLED)) {
     color_idx = 0;
   }
-  for (uint16_t idx = 0; idx < NUM_LEDS_PER_DISK; idx++) {
+  for (idx = 0; idx < NUM_LEDS_PER_DISK; idx++) {
     led_display[idx] = colorLED[color_idx];
   }
+  Serial.println(idx);
   delay(1000);
 
 }
