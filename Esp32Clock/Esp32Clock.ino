@@ -66,7 +66,7 @@ template <typename T> int sgn(T val) {
     return (T(0) < val) - (val < T(0));
 } // returns -1, 0, 1 for (T < 0), (T == 0), (T > 0) respectively. returns warning if used on uintx_t
 
-#define USE_PROGMEM true                     // set true to keep big const items in FLASH (PROGMEM keyword)
+#define USE_PROGMEM false                     // set true to keep big const items in FLASH (PROGMEM keyword)
 
 #define BRIGHTMAX 120 // set to 250 for final version
 
@@ -153,9 +153,10 @@ static struct _myState_t {
 
 } g_myState;
 
-#define DEBUGALL_GLOBAL 0                    // sets ALL debug flags at once
-#define DEBUG_WIFI_NTP  true                 // shows the steps for NTP time acquisition
-#define DEBUG_SHOW_MSEC 1                    // use globalLoopCount for millis() display not loopcount
+#define DEBUGALL_GLOBAL false                       // sets ALL debug flags at once
+#define DEBUG_WIFI_NTP  (true  || DEBUGALL_GLOBAL)  // shows the steps for NTP time acquisition
+#define DEBUG_CLOCKFACE (false || DEBUGALL_GLOBAL)  // shows internals of display modification for clock face
+#define DEBUG_SHOW_MSEC true                        // use globalLoopCount for millis() display not loopcount
 static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is either the milliseconds since startup or a count of times through loop()
 
 #define DISCONNECT_WIFI true    // disconnect WiFi as soon as we are done getting NTP time
@@ -216,7 +217,7 @@ void setup() {
   FastLED.addLeds<WS2812B,DPIN_FASTLED,COLOR_ORDER>(led_display, NUM_LEDS_PER_DISK);
   FastLED.setBrightness(BRIGHTMAX); // we will do our own power management
   // initialize led_display and put copy in SHADOW storage
-  RBG_diskInitBrightSpots(g_setupBrightSpots, &led_BLACK, 3, 196); // FIXME need initialize for this pattern
+  // RBG_diskInitBrightSpots(g_setupBrightSpots, &led_BLACK, 3, 196); // FIXME need initialize for this pattern
   memcpy(&led_display[NUM_LEDS_PER_DISK], &led_display[0], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
 
   Serial.println("ESP32Clock initialized...");
@@ -385,16 +386,6 @@ void updateClockTime(char * pTime) {
   // TBS FIXME
 } // 
 
-/*   DELETE_ME
-typedef struct {
-  uint8_t style_ana_dig;
-  uint8_t style_toll; // ask not for whom the clock tolls...
-} clock_style_struct_t;
-#define CLOCK_STYLE_DIGITAL 1
-#define CLOCK_STYLE_ANALOG  2
-#define CLOCK_STYLE_TOLL_FLASH 1
-*/
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // displayClockTime()
 //    display time as analog or digital with correct styling
@@ -404,7 +395,7 @@ void displayClockTime() {
   if (DEBUGALL_GLOBAL) { Serial.println("displayClockTime"); }
   
   // copy in the "face" from the shadow area
-  memcpy(&led_display[NUM_LEDS_PER_DISK], &led_display[0], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
+  memcpy(&led_display[0], &led_display[NUM_LEDS_PER_DISK], NUM_LEDS_PER_DISK*sizeof(led_BLACK));
 
   if (g_clock_style.style_ana_dig == CLOCK_STYLE_DIGITAL) {
     // TBS FIXME
@@ -426,6 +417,7 @@ void displayClockTime() {
 //
 void displaySecondHand(uint8_t theSec, CRGB* pColor) { // second is a known word in Arduino
   effectStickRadar(theSec, pColor, NUM_RINGS_PER_DISK);
+  // effectStick(theSec, pColor, NUM_RINGS_PER_DISK);
 } // end displaySecondHand()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -470,11 +462,11 @@ static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
  { 0, 1, 2, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 22, 23, 24, 25, 26, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 34, 35, 36, 37, 38, 38, 39, 40, 41, 42, 42, 43, 44, 45, 46, 46, 47 },
  { 0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 17, 17, 18, 19, 19, 20, 21, 21, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 30, 31, 31, 32, 33, 33, 34, 35, 35, 36, 37, 37, 38, 39, 39 },
  { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31 },
- { 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23, 0 },
- { 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 0 },
+ { 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23 },
+ { 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15 },
  { 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 0, 0 },
  { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 0, 0, 0 },
- { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+ { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 }; // end radar_ring_idx[][]
 #define TRUE_IDX(idx,ring) ((idx)%leds_per_ring[ring])+start_per_ring[ring]
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -493,7 +485,14 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
   uint16_t ring;
   uint16_t idx, idx2;
 
-  if (DEBUGALL_GLOBAL) { Serial.println("effectStickRadar"); }
+#if DEBUG_CLOCKFACE
+  uint16_t debug_idx[NUM_RINGS_PER_DISK];
+  for (ring = 0; ring < NUM_RINGS_PER_DISK; ring++) {
+    debug_idx[ring] = 255;
+  }
+
+  Serial.println("effectStickRadar");
+#endif // DEBUG_CLOCKFACE
 
   // make sure units is valid; get the color of the sweep hand
   units %= 60;
@@ -501,15 +500,19 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
 
   for (ring = 0; ring < numRings; ring++) {
     idx = TRUE_IDX(radar_ring_idx[ring][units], ring);
+#if DEBUG_CLOCKFACE
+    debug_idx[ring] = idx;
+#endif // DEBUG_CLOCKFACE
     // calculate color for the point of this ring
     led_display[idx].red   = min(((uint16_t)led_display[idx].red)   + led_tmp1.red,   255);
     led_display[idx].green = min(((uint16_t)led_display[idx].green) + led_tmp1.green, 255);
     led_display[idx].blue  = min(((uint16_t)led_display[idx].blue)  + led_tmp1.blue,  255);
-    if (ring < 7) {
-      // calculate 1/2 of color
-      led_tmp1.red >>= 1;
-      led_tmp1.green >>= 1;
-      led_tmp1.blue >>= 1;
+    if ((ring > 1) &&(ring < 7)) {
+      // calculate 1/4 of color
+      led_tmp1.red >>= 2;
+      led_tmp1.green >>= 2;
+      led_tmp1.blue >>= 2;
+      /*
       // leading 1/2
       if (idx != radar_ring_previdx[ring]) {
         idx2 = TRUE_IDX(1+radar_ring_idx[ring][units], ring);
@@ -517,11 +520,13 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
         led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
         led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
       }
-      // trailing 1/2
+      */
+      // trailing 1/4
       idx2 = TRUE_IDX(leds_per_ring[ring]-1+radar_ring_idx[ring][units], ring);
       led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
       led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
       led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      /*
       // trailing 1/4
       // calculate 1/4 of color
       led_tmp1.red >>= 1;
@@ -540,9 +545,22 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
       led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
       led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
       led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
+      */
     } // end if a big ring
     radar_ring_previdx[ring] = idx; // FIXME - only works for one stick
   } // end for all rings
+#if DEBUG_CLOCKFACE
+  Serial.print("effectStickRadar numRings ");
+  Serial.print(numRings);
+  Serial.print(" index");
+  for (ring = 0; ring < NUM_RINGS_PER_DISK; ring++) {
+    Serial.print(" ");
+    Serial.print(ring);
+    Serial.print(":");
+    Serial.print(debug_idx[ring]);
+  }
+  Serial.println(" ");
+#endif // DEBUG_CLOCKFACE
 }; // end effectStickRadar()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -556,7 +574,9 @@ void effectStick(uint8_t units, CRGB* pColor, uint8_t numRings) {
   uint16_t ring;
   uint16_t idx;
 
-  if (DEBUGALL_GLOBAL) { Serial.println("effectStick"); }
+#if DEBUG_CLOCKFACE
+  Serial.println("effectStick");
+#endif // DEBUG_CLOCKFACE
 
   // make sure sec is valid; get the color of the sweep hand
   units %= 60;
