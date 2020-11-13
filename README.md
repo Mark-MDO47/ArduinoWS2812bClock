@@ -1,5 +1,5 @@
 # ESP32 WS2812b Clock
-Experimenting with this incredible low-priced WS2812b 241-LED disk.
+Experimenting with this incredible low-priced WS2812b 241-LED disk. I do find that feeding it enough power is a bit challenging. When the inner rings are starved they behave erratically.
 
 Dimensions of the disk are here: https://github.com/Mark-MDO47/ESP32WS2812bClock/blob/main/images/LED_241_Dimensions.jpg
 
