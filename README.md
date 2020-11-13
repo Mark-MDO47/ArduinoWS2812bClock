@@ -16,3 +16,6 @@ Parts List so far
 | 0 | $6.00 | $0.00 | ESP32 ESP-32S CP2102 NodeMCU-32S ESP-WROOM-32 WiFi | https://smile.amazon.com/DORHEA-Development-Microcontroller-NodeMCU-32S-ESP-WROOM-32/dp/B086MJGFVV/ |
 | 1 | $4.45 | $4.45 | UBEC 3Amp: | https://smile.amazon.com/2-Pieces-Hobbywing-Switch-mode-UBEC-Helicopter-Quadcopter/dp/B01GHMW0C0 |
 | 1 | $0.40 | $0.40 | SN74HCT125N quadruple bus buffer and voltage translator | https://www.digikey.com/product-detail/en/texas-instruments/SN74HCT125N/296-8386-5-ND/376860 |
+| 1 | $0.10 | $0.10 | 10K Ohm resistor, 1/4 watt | https://www.digikey.com/en/products/detail/stackpole-electronics-inc/CF14JT10K0/1741265 |
+| 1 | $0.10 | $0.10 | 0.1 uF electrolytic capacitor | https://www.digikey.com/en/products/detail/w%C3%BCrth-elektronik/860010672001/5728608 |
+| 1 | $0.53 | $0.53 | 100 uF electrolytic capacitor | https://www.digikey.com/en/products/detail/panasonic-electronic-components/ECA-2AM101/245067 |
