@@ -1,5 +1,7 @@
 # ESP32 WS2812b Clock
-Experimenting with this incredible low-priced WS2812b 241-LED disk. I do find that feeding it enough power is a bit challenging. When the inner rings are starved they behave erratically.
+Experimenting with this incredible low-priced WS2812b 241-LED disk.
+
+I found that feeding it enough power required some work. When the inner rings are starved for power they behave erratically. The wiring shipped with the 241-LED disk, connected daisy chain, doesn't work reliably with the breadboard power scheme I used in the past for the 93-LED disks. I soldered in the sort of bus bar connections I used in the graduation cap project and now all the LEDs behave reliably.
 
 Dimensions of the disk are here: https://github.com/Mark-MDO47/ESP32WS2812bClock/blob/main/images/LED_241_Dimensions.jpg
 
