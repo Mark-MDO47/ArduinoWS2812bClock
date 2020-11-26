@@ -28,10 +28,15 @@
 //       I am just having fun with it.
 //       Mark
 
-
-#include <WiFi.h>
+// some useful utility libraries
 #include <time.h>
 #include <string.h>
+
+// WiFi, OTA update, OTA debug
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 #include <mdo_config.h>
 
 #include "FastLED.h"                         // to manipulate WS2812b (NeoPixel) 5050 RGB LED Rings
@@ -159,7 +164,8 @@ static struct _myState_t {
 #define DEBUG_SHOW_MSEC true                        // use globalLoopCount for millis() display not loopcount
 static uint32_t globalLoopCount = 0;  // based on DEBUG_SHOW_MSEC: this is either the milliseconds since startup or a count of times through loop()
 
-#define DISCONNECT_WIFI true    // disconnect WiFi as soon as we are done getting NTP time
+#define KEEP_CONNECT_WIFI false   // leave WiFi connected
+#define DISCONNECT_WIFI   true    // disconnect WiFi as soon as we are done getting NTP time
 
 #define DPIN_FASTLED 23  // will need to experiment for my board: ESP32 ESP-32S CP2102 NodeMCU-32S ESP-WROOM-32 WiFi Unassembled https://smile.amazon.com/gp/product/B08DQQ8CBP/
                          // GPIO23 is marked on this board as D23. With the USB on the bottom, it is pin number 15 from the bottom on the right hand side (top on RH side).
@@ -208,8 +214,11 @@ void setup() {
   for (int i = 0; i < NUMOF(g_radar_xray_bitmask); i++) { g_radar_xray_bitmask[i] = 0; } // TBS FIXME maybe not used
 
   // get NTP time and install as local time then disconnect from WiFi
-  connectGetNtpInfoAndDisconnect(DISCONNECT_WIFI, DEBUG_WIFI_NTP);
+  connectGetNtpInfoAndDisconnect(KEEP_CONNECT_WIFI, DEBUG_WIFI_NTP);
   check_wifi_status();
+
+  // enable OTA updates and debugging
+  enableOTA();
 
   // initialize the FastLED library for our setup
   // according to Amazon comments: Library configuration used was WS2812B GRB (not RGB). Library call: FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);. Everything worked as expected.
@@ -245,7 +254,7 @@ void loop() {
       // check if we reached the hour
       justReachedHour = (0 == g_tm_time.tm_sec) && (0 == g_tm_time.tm_min);
       if (justReachedHour) {
-        connectGetNtpInfoAndDisconnect(DISCONNECT_WIFI, DEBUG_WIFI_NTP);
+        connectGetNtpInfoAndDisconnect(KEEP_CONNECT_WIFI, DEBUG_WIFI_NTP);
         check_wifi_status();
       } // end if refresh NTP info once per hour
     } // end if the seconds field changed
@@ -276,12 +285,75 @@ void loop() {
   globalLoopCount += 1;
   gHue += 3; // general LED patterns - rotating "base color" used by Demo Reel 100 patterns
 
+  // keep the door open for OTA update, OTA debug
+  ArduinoOTA.handle();
+
   // delay before checking time again
   delay(50);
 } // end loop()
 
 
 // ******************************** WIFI AND TIME UTILITIES ********************************
+
+
+void enableOTA() {
+
+  if (WiFi.status() != WL_CONNECTED) {
+
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(SSID, WiFiPassword);
+      while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+          Serial.println("Connection Failed! Rebooting...");
+          delay(5000);
+          ESP.restart();
+      }
+  } // if need to connect to WiFi
+  
+  // Port defaults to 3232
+  // ArduinoOTA.setPort(3232);
+  
+  // make it easier for OTA
+  ArduinoOTA.setHostname("Esp32Clock");
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA
+      .onStart([]() {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH)
+          type = "sketch";
+      else // U_SPIFFS
+          type = "filesystem";
+
+      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+      Serial.println("Start updating " + type);
+          })
+      .onEnd([]() {
+              Serial.println("\nEnd");
+          })
+              .onProgress([](unsigned int progress, unsigned int total) {
+              Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+                  })
+              .onError([](ota_error_t error) {
+                      Serial.printf("Error[%u]: ", error);
+                      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+                      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+                      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+                      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+                      else if (error == OTA_END_ERROR) Serial.println("End Failed");
+                  });
+
+                  ArduinoOTA.begin();
+
+                  Serial.println("Ready");
+                  Serial.print("IP address: ");
+                  Serial.println(WiFi.localIP());
+} // end enableOTA()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // check_wifi_status - handle wifi errors
@@ -416,8 +488,8 @@ void displayClockTime() {
 //    display the second hand in the correct style
 //
 void displaySecondHand(uint8_t theSec, CRGB* pColor) { // second is a known word in Arduino
-  effectStickRadar(theSec, pColor, NUM_RINGS_PER_DISK);
-  // effectStick(theSec, pColor, NUM_RINGS_PER_DISK);
+  // effectStickSeconds(theSec, pColor, NUM_RINGS_PER_DISK);
+  effectStick(theSec, pColor, NUM_RINGS_PER_DISK);
 } // end displaySecondHand()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -453,25 +525,25 @@ void displayClockToll() {
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-// radar_ring_idx[ring][sec] describes the index within each ring of a moving second-hand or a leading edge of a radar sweep as it moves in a clockwise TBR direction
+// stick_ring_idx[ring][sec] describes the index within each ring of a moving second-hand or a leading edge of a radar sweep as it moves in a clockwise TBR direction
 // for ring 0 which has 60 LEDs, it is just a count of 0 through 59
 // others are computed by calculating MOD(ROUND(ring0num[idx]*NUM_LEDS_THIS_RING/MAX_LEDS_PER_RING,0),NUM_LEDS_THIS_RING)
 // we do NOT add the starting LED per ring from start_per_ring[]. The mod calculations for each ring as we go left and right are easier with the data in this form, without that addition
-static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
- { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59 },
- { 0, 1, 2, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10, 10, 11, 12, 13, 14, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 22, 23, 24, 25, 26, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 34, 35, 36, 37, 38, 38, 39, 40, 41, 42, 42, 43, 44, 45, 46, 46, 47 },
- { 0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15, 16, 17, 17, 18, 19, 19, 20, 21, 21, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29, 30, 31, 31, 32, 33, 33, 34, 35, 35, 36, 37, 37, 38, 39, 39 },
- { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31 },
- { 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12, 12, 13, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 18, 18, 18, 19, 19, 20, 20, 20, 21, 21, 22, 22, 22, 23, 23 },
- { 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15 },
- { 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 0, 0 },
- { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 0, 0, 0 },
- { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-}; // end radar_ring_idx[][]
+static uint8_t const stick_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
+  { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59 },
+  { 0, 1, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 23, 24, 25, 26, 27, 28, 28, 29, 30, 30, 31, 32, 32, 33, 34, 35, 36, 37, 38, 39, 40, 40, 41, 42, 42, 43, 44, 44, 45, 46, 47 },
+  { 0, 1, 2, 3, 4, 4, 4, 5, 5, 6, 6, 6, 7, 8, 9, 10, 11, 12, 13, 14, 14, 14, 15, 15, 16, 16, 16, 17, 18, 19, 20, 21, 22, 23, 24, 24, 24, 25, 25, 26, 26, 26, 27, 28, 29, 30, 31, 32, 33, 34, 34, 34, 35, 35, 36, 36, 36, 37, 38, 39 },
+  { 0, 1, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 7, 8, 9, 10, 11, 11, 11, 11, 12, 12, 13, 13, 13, 13, 14, 15, 16, 17, 18, 19, 19, 19, 19, 20, 20, 21, 21, 21, 21, 22, 23, 24, 25, 26, 27, 27, 27, 27, 28, 28, 29, 29, 29, 29, 30, 31 },
+  { 0, 1, 2, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 5, 6, 7, 8, 8, 8, 8, 8, 9, 9, 10, 10, 10, 10, 10, 11, 12, 13, 14, 14, 14, 14, 14, 15, 15, 16, 16, 16, 16, 16, 17, 18, 19, 20, 20, 20, 20, 20, 21, 21, 22, 22, 22, 22, 22, 23 },
+  { 0, 1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 3, 3, 4, 5, 5, 5, 5, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7, 8, 9, 9, 9, 9, 9, 9, 10, 10, 11, 11, 11, 11, 11, 11, 12, 13, 13, 13, 13, 13, 13, 14, 14, 15, 15, 15, 15, 15, 15 },
+  { 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 9, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11 },
+  { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7 },
+  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+}; // end stick_ring_idx[][]
 #define TRUE_IDX(idx,ring) ((idx)%leds_per_ring[ring])+start_per_ring[ring]
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-// effectStickRadar()
-//    The idea is to use radar_ring_idx[ring][units] for the "point" of the line on each ring. The rings are ordered outside first then going inside.
+// effectStickSeconds()
+//    The idea is to use stick_ring_idx[ring][units] for the "point" of the line on each ring. The rings are ordered outside first then going inside.
 //    There will be trailing and leading fade for the big rings 0-7. It will trail at 1/2, 1/4 and 1/8 intensity for three rings after the point.
 //    The lead will be zero when the point moves. Each time the point stays still the lead will be one LED at 1/2 intensity.
 // The background is the shadow area.
@@ -480,7 +552,7 @@ static uint8_t const radar_ring_idx[NUM_RINGS_PER_DISK][MAX_LEDS_PER_RING] = {
 //
 // FIXME - Can only be used for one stick due to radar_ring_previdx[]
 //
-void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
+void effectStickSeconds(uint8_t units, CRGB* pColor, uint8_t numRings) {
   static uint8_t radar_ring_previdx[NUM_RINGS_PER_DISK] = { NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK, NUM_LEDS_PER_DISK }; //
   uint16_t ring;
   uint16_t idx, idx2;
@@ -491,7 +563,7 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
     debug_idx[ring] = 255;
   }
 
-  Serial.println("effectStickRadar");
+  Serial.println("effectStickSeconds");
 #endif // DEBUG_CLOCKFACE
 
   // make sure units is valid; get the color of the sweep hand
@@ -499,7 +571,7 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
   led_tmp1 = *pColor;
 
   for (ring = 0; ring < numRings; ring++) {
-    idx = TRUE_IDX(radar_ring_idx[ring][units], ring);
+    idx = TRUE_IDX(stick_ring_idx[ring][units], ring);
 #if DEBUG_CLOCKFACE
     debug_idx[ring] = idx;
 #endif // DEBUG_CLOCKFACE
@@ -515,14 +587,14 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
       /*
       // leading 1/2
       if (idx != radar_ring_previdx[ring]) {
-        idx2 = TRUE_IDX(1+radar_ring_idx[ring][units], ring);
+        idx2 = TRUE_IDX(1+stick_ring_idx[ring][units], ring);
         led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
         led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
         led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
       }
       */
       // trailing 1/4
-      idx2 = TRUE_IDX(leds_per_ring[ring]-1+radar_ring_idx[ring][units], ring);
+      idx2 = TRUE_IDX(leds_per_ring[ring]-1+stick_ring_idx[ring][units], ring);
       led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
       led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
       led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
@@ -532,7 +604,7 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
       led_tmp1.red >>= 1;
       led_tmp1.green >>= 1;
       led_tmp1.blue >>= 1;
-      idx2 = TRUE_IDX(leds_per_ring[ring]-2+radar_ring_idx[ring][units], ring);
+      idx2 = TRUE_IDX(leds_per_ring[ring]-2+stick_ring_idx[ring][units], ring);
       led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
       led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
       led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
@@ -541,7 +613,7 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
       led_tmp1.red >>= 1;
       led_tmp1.green >>= 1;
       led_tmp1.blue >>= 1;
-      idx2 = TRUE_IDX(leds_per_ring[ring]-3+radar_ring_idx[ring][units], ring);
+      idx2 = TRUE_IDX(leds_per_ring[ring]-3+stick_ring_idx[ring][units], ring);
       led_display[idx2].red   = min(((uint16_t)led_display[idx2].red)   + led_tmp1.red,   255);
       led_display[idx2].green = min(((uint16_t)led_display[idx2].green) + led_tmp1.green, 255);
       led_display[idx2].blue  = min(((uint16_t)led_display[idx2].blue)  + led_tmp1.blue,  255);
@@ -550,7 +622,7 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
     radar_ring_previdx[ring] = idx; // FIXME - only works for one stick
   } // end for all rings
 #if DEBUG_CLOCKFACE
-  Serial.print("effectStickRadar numRings ");
+  Serial.print("effectStickSeconds numRings ");
   Serial.print(numRings);
   Serial.print(" index");
   for (ring = 0; ring < NUM_RINGS_PER_DISK; ring++) {
@@ -561,11 +633,11 @@ void effectStickRadar(uint8_t units, CRGB* pColor, uint8_t numRings) {
   }
   Serial.println(" ");
 #endif // DEBUG_CLOCKFACE
-}; // end effectStickRadar()
+}; // end effectStickSeconds()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // effectStick()
-//    The idea is to use radar_ring_idx[ring][units] for the "point" of the line on each ring. The rings are ordered outside (big) first then going inside.
+//    The idea is to use stick_ring_idx[ring][units] for the "point" of the line on each ring. The rings are ordered outside (big) first then going inside.
 // The background is the shadow area.
 // For now the direction is in the clockwise direction
 // units = direction of stick in 1/60 of a circle
@@ -583,7 +655,7 @@ void effectStick(uint8_t units, CRGB* pColor, uint8_t numRings) {
   led_tmp1 = *pColor;
 
   for (ring = 0; ring < numRings; ring++) {
-    idx = TRUE_IDX(radar_ring_idx[ring][units], ring);
+    idx = TRUE_IDX(stick_ring_idx[ring][units], ring);
     // calculate color for the point of this ring
     led_display[idx].red   = min(((uint16_t)led_display[idx].red)   + led_tmp1.red,   255);
     led_display[idx].green = min(((uint16_t)led_display[idx].green) + led_tmp1.green, 255);
